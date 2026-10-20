@@ -123,6 +123,8 @@ decimal string.
 | `GET /api/opportunities/:id` | Return an active opportunity with its items and salesperson. |
 | `POST /api/opportunities` | Create in `PRIMEIRO_CONTATO`; the server assigns its code. |
 | `PATCH /api/opportunities/:id` | Update commercial fields; include the current `version`. If `items` is sent, it replaces the current item list in the same transaction. |
+| `PATCH /api/opportunities/:id/stage` | Move the opportunity through the validated pipeline and append one history row in the same PostgreSQL transaction. |
+| `GET /api/opportunities/:id/history` | Return registered stage movements in chronological order. |
 | `DELETE /api/opportunities/:id` | Set `deletedAt`; repeated requests keep the original timestamp. |
 | `GET /api/salespeople` | List available salespeople. |
 
@@ -169,10 +171,81 @@ the same idempotent seed after `prisma migrate deploy`.
 The case explicitly defines the six stages, says Closed and Lost are final,
 requires an estimated value and at least one item before entering budget
 presentation, allows Lost from any non-final stage with a reason, and requires
-Closing to come from Forecast. It also asks for transition history and a choice
-about backward transitions. These workflow rules and history are reserved for a
-later branch: this module intentionally exposes no stage transition endpoint and
-does not create undocumented history.
+Closing to come from Forecast. It asks for transition history and leaves
+backward movements as a documented project choice. These rules are implemented
+by the dedicated stage endpoint; the generic opportunity PATCH rejects `stage`.
+
+### Pipeline and history
+
+Active stages advance one step at a time:
+
+| From | Allowed destination | Rule |
+| --- | --- | --- |
+| `PRIMEIRO_CONTATO` | `APRESENTACAO_ORCAMENTO` | Requires a non-null estimated value and at least one persisted item with positive quantity. |
+| `APRESENTACAO_ORCAMENTO` | `FOLLOW_UP` | Sequential advance. |
+| `FOLLOW_UP` | `FORECAST` | Sequential advance. |
+| `FORECAST` | `FECHAMENTO` | Closing is only allowed from Forecast. |
+| Any active stage | `PERDIDA` | Requires a non-empty loss reason after trimming; saved on the opportunity and transition. |
+| Any active stage after the first | Previous active stage | One-step backward movement requires a non-empty reason, saved in transition history. |
+
+`FECHAMENTO` and `PERDIDA` are terminal. No same-stage movement or stage jump
+is accepted. These backward rules are the project's complementary choice: the
+PDF gives Follow-up to Budget Presentation as an example of a possible return,
+but does not prescribe exact return rules. This implementation permits only a
+single active stage at a time and requires a justification.
+
+Example request:
+
+```http
+PATCH /api/opportunities/00000000-0000-4000-8000-000000000001/stage
+Content-Type: application/json
+```
+
+```json
+{
+  "toStage": "FOLLOW_UP",
+  "version": 2,
+  "reason": "Cliente solicitou nova avaliação"
+}
+```
+
+The successful response is the updated opportunity, including its incremented
+`version`. An outdated version returns HTTP 409. Invalid business movements or
+missing commercial prerequisites return HTTP 422; malformed DTOs return 400;
+missing or soft-deleted opportunities return 404. The standardized error body
+includes `statusCode`, `error`, `message`, `correlationId`, `timestamp`, and
+`path`.
+
+Examples of the standard error response messages:
+
+| Status | Example `message` | Example cause |
+| --- | --- | --- |
+| 400 | `Validation failed` | Unknown `stage` sent to the generic PATCH, or invalid/missing `version`. |
+| 404 | `Opportunity not found` | ID does not exist or the opportunity is soft-deleted. |
+| 409 | `Opportunity version is stale` | Another update already used the submitted version. |
+| 422 | `An estimated value is required` | Entering budget presentation with a persisted null value. |
+| 422 | `A loss reason is required` | Moving to Lost without a non-blank reason. |
+
+The API reads the current persisted stage and item/value data before applying
+the policy. A compare-and-set update conditioned on the supplied `version`
+prevents concurrent requests from both succeeding. The opportunity update and
+append-only `StageTransition` insert share one PostgreSQL transaction, so an
+error in either operation rolls back both. The history endpoint orders by
+`changedAt`, then UUID, for stable results when timestamps tie. It returns 404
+for logically deleted opportunities. No edit or delete endpoint exists for
+history.
+
+Editing commercial fields does not require legacy opportunities to satisfy
+current transition requirements. For an opportunity past the initial stage
+that currently has both budget value and a positive item, a regular edit cannot
+remove the value or all positive items. If an imported record is already
+incomplete, unrelated edits remain available; a new transition into Budget
+Presentation still checks the persisted values and items.
+
+The seed continues to import the seven case opportunities as-is and creates no
+transition rows: their current stages are known, but the source does not tell us
+the earlier movements. OPP-2007 therefore remains `PERDIDA` with its source
+loss reason absent; it is not retroactively assigned a reason or history.
 
 Technical choices in this branch are: UUID identifiers; case-sensitive unique
 seller names; server-assigned codes from a PostgreSQL sequence starting at

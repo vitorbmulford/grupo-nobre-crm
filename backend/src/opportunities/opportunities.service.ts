@@ -9,7 +9,9 @@ import { Prisma } from '../generated/prisma/client.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { CreateOpportunityDto } from './dto/create-opportunity.dto.js';
 import { ListOpportunitiesQueryDto } from './dto/list-opportunities-query.dto.js';
+import { TransitionStageDto } from './dto/transition-stage.dto.js';
 import { UpdateOpportunityDto } from './dto/update-opportunity.dto.js';
+import { evaluateTransition } from './pipeline/pipeline-policy.js';
 
 const opportunityRelations = {
   salesperson: true,
@@ -112,6 +114,37 @@ export class OpportunitiesService {
     try {
       return await this.prisma.$transaction(async (transaction) => {
         const { version, items, ...fields } = dto;
+        const current = await transaction.opportunity.findFirst({
+          where: { id, deletedAt: null },
+          include: { items: true },
+        });
+        if (!current) throw new NotFoundException('Opportunity not found');
+        if (current.version !== version) {
+          throw new ConflictException('Opportunity version is stale');
+        }
+        const currentHasBudgetData = hasBudgetData(
+          current.estimatedValue,
+          current.items,
+        );
+        const nextEstimatedValue =
+          fields.estimatedValue === undefined
+            ? current.estimatedValue
+            : decimal(fields.estimatedValue);
+        const nextHasBudgetData = hasBudgetData(
+          nextEstimatedValue,
+          items === undefined
+            ? current.items
+            : items.map((item) => ({ quantity: item.quantity })),
+        );
+        if (
+          current.stage !== 'PRIMEIRO_CONTATO' &&
+          currentHasBudgetData &&
+          !nextHasBudgetData
+        ) {
+          throw new UnprocessableEntityException(
+            'An opportunity past the first stage must retain its estimated value and at least one gift item',
+          );
+        }
         const data: Prisma.OpportunityUpdateManyMutationInput = {
           version: { increment: 1 },
           ...(fields.companyName !== undefined
@@ -179,6 +212,97 @@ export class OpportunitiesService {
     }
   }
 
+  async transitionStage(id: string, dto: TransitionStageDto) {
+    try {
+      return await this.prisma.$transaction(async (transaction) => {
+        const current = await transaction.opportunity.findFirst({
+          where: { id, deletedAt: null },
+          include: { items: true },
+        });
+        if (!current) throw new NotFoundException('Opportunity not found');
+        if (current.version !== dto.version) {
+          throw new ConflictException('Opportunity version is stale');
+        }
+
+        let decision: ReturnType<typeof evaluateTransition>;
+        try {
+          decision = evaluateTransition(
+            current.stage,
+            dto.toStage,
+            dto.reason,
+            current.estimatedValue !== null,
+            current.items.some((item) => item.quantity > 0),
+          );
+        } catch (error) {
+          throw new UnprocessableEntityException(
+            error instanceof Error ? error.message : 'Invalid stage transition',
+          );
+        }
+
+        const updated = await transaction.opportunity.updateMany({
+          where: {
+            id,
+            version: dto.version,
+            stage: current.stage,
+            deletedAt: null,
+          },
+          data: {
+            stage: dto.toStage,
+            ...(dto.toStage === 'PERDIDA'
+              ? { lossReason: decision.reason }
+              : {}),
+            version: { increment: 1 },
+          },
+        });
+        if (updated.count !== 1) {
+          const latest = await transaction.opportunity.findUnique({
+            where: { id },
+            select: { deletedAt: true },
+          });
+          if (!latest || latest.deletedAt) {
+            throw new NotFoundException('Opportunity not found');
+          }
+          throw new ConflictException('Opportunity version is stale');
+        }
+
+        await transaction.stageTransition.create({
+          data: {
+            opportunityId: id,
+            fromStage: current.stage,
+            toStage: dto.toStage,
+            reason: decision.reason,
+          },
+        });
+        const opportunity = await transaction.opportunity.findUniqueOrThrow({
+          where: { id },
+          include: opportunityRelations,
+        });
+        return serializeOpportunity(opportunity);
+      });
+    } catch (error) {
+      throw mapPrismaError(error);
+    }
+  }
+
+  async history(id: string) {
+    const opportunity = await this.prisma.opportunity.findFirst({
+      where: { id, deletedAt: null },
+      select: {
+        stageTransitions: {
+          orderBy: [{ changedAt: 'asc' }, { id: 'asc' }],
+        },
+      },
+    });
+    if (!opportunity) throw new NotFoundException('Opportunity not found');
+    return opportunity.stageTransitions.map((transition) => ({
+      id: transition.id,
+      fromStage: transition.fromStage,
+      toStage: transition.toStage,
+      reason: transition.reason,
+      changedAt: transition.changedAt.toISOString(),
+    }));
+  }
+
   async softDelete(id: string): Promise<void> {
     const result = await this.prisma.opportunity.updateMany({
       where: { id, deletedAt: null },
@@ -192,6 +316,13 @@ export class OpportunitiesService {
     });
     if (!existing) throw new NotFoundException('Opportunity not found');
   }
+}
+
+function hasBudgetData(
+  estimatedValue: Prisma.Decimal | null,
+  items: Array<{ quantity: number }>,
+): boolean {
+  return estimatedValue !== null && items.some((item) => item.quantity > 0);
 }
 
 function decimal(value: string | null | undefined): Prisma.Decimal | null {
