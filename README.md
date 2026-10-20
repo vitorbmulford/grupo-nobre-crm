@@ -60,3 +60,8 @@ input and is ignored by Git.
 Stage changes use a dedicated pipeline endpoint with optimistic concurrency and
 append-only transition history; the backend README documents its rules and
 examples.
+
+The backend evaluates follow-up risks every 15 minutes and stores
+deduplicated, resolvable alerts in PostgreSQL. The risk types, configuration,
+manual acknowledgment behavior, API, case-date scenarios, and test commands are
+documented in [`backend/README.md`](backend/README.md#follow-up-risk-automation).
