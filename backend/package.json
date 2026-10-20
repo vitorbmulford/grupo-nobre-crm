@@ -28,7 +28,9 @@
     "test:e2e": "vitest run --config ./vitest.config.e2e.ts",
     "pretest:e2e": "npm run prisma:generate",
     "prisma:generate": "DATABASE_URL=postgresql://build:build@127.0.0.1:5432/build prisma generate",
-    "prisma:migrate:deploy": "prisma migrate deploy"
+    "prisma:migrate:deploy": "prisma migrate deploy",
+    "prisma:seed": "npm run build && prisma db seed",
+    "seed:run": "node dist/prisma-seed.js"
   },
   "dependencies": {
     "@nestjs/common": "^12.0.1",
