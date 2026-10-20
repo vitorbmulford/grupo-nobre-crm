@@ -108,6 +108,80 @@ Credentials containing reserved URL characters must be URL-encoded. The
 application validates environment configuration with Joi and reports invalid
 variable names without printing values.
 
+## Opportunities API
+
+The initial opportunities migration is
+`prisma/migrations/20261020150000_initial_opportunities`. It creates
+`Salesperson`, `Opportunity`, `OpportunityItem`, the six-stage enum, business
+constraints, lookup indexes, and a database sequence for generated commercial
+codes. PostgreSQL stores money as `DECIMAL(14,2)`, and the API sends it as a
+decimal string.
+
+| Method and path | Behavior |
+| --- | --- |
+| `GET /api/opportunities` | Search code/company and filter by stage or salesperson; sort and paginate. |
+| `GET /api/opportunities/:id` | Return an active opportunity with its items and salesperson. |
+| `POST /api/opportunities` | Create in `PRIMEIRO_CONTATO`; the server assigns its code. |
+| `PATCH /api/opportunities/:id` | Update commercial fields; include the current `version`. If `items` is sent, it replaces the current item list in the same transaction. |
+| `DELETE /api/opportunities/:id` | Set `deletedAt`; repeated requests keep the original timestamp. |
+| `GET /api/salespeople` | List available salespeople. |
+
+Swagger UI is available at `/api/docs`. Unknown request properties are rejected,
+so `stage` cannot be changed through create or patch. The next branch should add
+the dedicated transition endpoint before enabling stage updates.
+
+### Logical deletion
+
+`Opportunity.deletedAt` is nullable and was included in the first migration.
+The delete endpoint never physically removes an opportunity. A database unique
+constraint keeps its `code` reserved, and `ON DELETE RESTRICT` foreign keys
+prevent physical deletion of an opportunity with items or a salesperson still
+referenced by opportunities. Items stay attached to soft-deleted opportunities.
+There is no restoration endpoint.
+
+Every current opportunity read includes `deletedAt: null`; future pipeline,
+activity, and automation queries must apply the same predicate. Compound indexes
+on `(stage, deletedAt)` and `(salespersonId, deletedAt)` support these filtered
+reads. Do not use physical cascades when adding future relationships: history and
+activity records must remain referentially safe.
+
+### Case seed and source decisions
+
+The source is `Case_Tecnico_Dev_Full_Stack_Pleno_Grupo_Nobre.pdf` (two pages,
+data reference 15/10/2026). The seed imports OPP-2001 through OPP-2007, all
+listed companies, stages, sellers, one listed gift item and quantity per row,
+estimated values, last contacts, proposal validity, and customer event dates.
+It creates the three listed sellers Ana, Bruno, and Carla. OPP-2001 has an
+intentionally blank proposal validity date. The case does not provide a loss
+reason for OPP-2007 or a next follow-up timestamp for any row; those values
+remain `null`. Future risk automation must use documented signals such as last
+contact, proposal validity, and customer event dates instead of assuming a
+follow-up timestamp exists. No transition history is generated.
+
+Run the seed after migrations with `npm run prisma:seed` from `backend/`. It
+ensures the three sellers exist and creates each of the seven fixed commercial
+codes only when absent. Existing opportunities and items are left untouched, so
+rerunning the seed preserves later CRM edits and item IDs. Docker Compose runs
+the same idempotent seed after `prisma migrate deploy`.
+
+### Case requirements and implementation choices
+
+The case explicitly defines the six stages, says Closed and Lost are final,
+requires an estimated value and at least one item before entering budget
+presentation, allows Lost from any non-final stage with a reason, and requires
+Closing to come from Forecast. It also asks for transition history and a choice
+about backward transitions. These workflow rules and history are reserved for a
+later branch: this module intentionally exposes no stage transition endpoint and
+does not create undocumented history.
+
+Technical choices in this branch are: UUID identifiers; case-sensitive unique
+seller names; server-assigned codes from a PostgreSQL sequence starting at
+OPP-2008; optimistic concurrency with the required PATCH `version`; transactional
+replacement of submitted items; HTTP 409 for stale versions and duplicate
+codes; HTTP 422 for an unknown seller; and logical deletion without restoration.
+Null optional fields are returned as JSON `null`. The case sheet's blank values
+are not inferred.
+
 ## Technical decisions and limits
 
 NestJS supplies the module, dependency-injection, lifecycle, and HTTP
@@ -118,10 +192,11 @@ for structured JSON output and request-scoped HTTP logging without external log
 services.
 
 Prisma migrations remain the deployment mechanism; the Compose migration
-service runs `prisma migrate deploy` before the API. No business schema,
-migrations, authentication, or CRM endpoints are implemented yet. The
-Swagger document currently describes the existing health endpoint and starter
-root endpoint; no test-only routes are included in the production application.
+service runs `prisma migrate deploy` and the idempotent case seed before the API.
+Authentication, state transitions, transition history, activities, automation,
+and a frontend are not implemented in this branch. The Swagger document also
+describes the existing health and starter root endpoints; test-only routes are
+not registered in the production application.
 
 Useful checks:
 

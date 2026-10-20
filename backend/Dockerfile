@@ -15,7 +15,7 @@ RUN DATABASE_URL=postgresql://build:build@127.0.0.1:5432/build npm run build
 FROM build AS migrate
 ENV NODE_ENV=production
 USER node
-CMD ["npm", "run", "prisma:migrate:deploy"]
+CMD ["sh", "-c", "npm run prisma:migrate:deploy && npm run seed:run"]
 
 FROM base AS production-dependencies
 COPY package.json package-lock.json ./

@@ -26,12 +26,11 @@ The Docker API is available at `http://localhost:3001`; its readiness endpoint i
 `127.0.0.1:5436` for local Nest development. Data is stored in the named
 `postgres_data` volume.
 
-The `migrate` service runs `prisma migrate deploy` once after PostgreSQL is
-healthy. The backend waits for that service to complete successfully before
-starting. With no migrations in the repository, Prisma reports that there are
-no pending migrations and exits successfully. Add versioned migrations under
-`backend/prisma/migrations` as the schema evolves; do not use `prisma migrate dev`
-or `prisma db push` in the startup flow.
+The `migrate` service runs `prisma migrate deploy` and then the idempotent case
+seed after PostgreSQL is healthy. The backend waits for that service to complete
+successfully before starting. Add versioned migrations under
+`backend/prisma/migrations`; do not use `prisma migrate dev` or `prisma db push`
+in the startup flow.
 
 `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_DB`, `POSTGRES_USER`, and
 `POSTGRES_PASSWORD` configure PostgreSQL and are used to construct the
@@ -49,3 +48,12 @@ The Compose network `app_internal` isolates PostgreSQL and the migration job.
 The backend also joins `app_ingress` so its published HTTP port is reachable
 from the host. A future frontend can join the appropriate network without
 publishing PostgreSQL.
+
+## Opportunities and deletion policy
+
+The first CRM module provides opportunities, their gift items, and salespeople.
+Its endpoints and business rules are documented in
+[`backend/README.md`](backend/README.md). Deleting an opportunity is a logical
+delete: the API sets `deletedAt`, keeps its commercial code and items, and hides
+it from regular queries. There is no restore endpoint. The case PDF is a local
+input and is ignored by Git.
