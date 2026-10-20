@@ -12,6 +12,8 @@ import { ApiExceptionFilter } from './http/api-exception.filter.js';
 import { OpportunitiesModule } from './opportunities/opportunities.module.js';
 import { SalespeopleModule } from './salespeople/salespeople.module.js';
 import { ActivitiesModule } from './activities/activities.module.js';
+import { ScheduleModule } from '@nestjs/schedule';
+import { AlertsModule } from './alerts/alerts.module.js';
 
 @Module({
   imports: [
@@ -53,6 +55,18 @@ import { ActivitiesModule } from './activities/activities.module.js';
               }
               return value;
             }),
+          FOLLOW_UP_EVALUATION_INTERVAL_MS: Joi.number()
+            .integer()
+            .min(1000)
+            .default(900000),
+          FOLLOW_UP_STALE_CONTACT_DAYS: Joi.number()
+            .integer()
+            .min(0)
+            .default(7),
+          FOLLOW_UP_CUSTOMER_EVENT_WINDOW_DAYS: Joi.number()
+            .integer()
+            .min(0)
+            .default(7),
         }).validate(config, { abortEarly: false, allowUnknown: true });
 
         if (error) {
@@ -115,10 +129,12 @@ import { ActivitiesModule } from './activities/activities.module.js';
       }),
     }),
     PrismaModule,
+    ScheduleModule.forRoot(),
     HealthModule,
     OpportunitiesModule,
     SalespeopleModule,
     ActivitiesModule,
+    AlertsModule,
   ],
   controllers: [AppController],
   providers: [

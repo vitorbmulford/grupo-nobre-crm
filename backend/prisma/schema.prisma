@@ -27,6 +27,18 @@ enum ActivityType {
   OTHER
 }
 
+enum FollowUpAlertType {
+  FOLLOW_UP_OVERDUE
+  CONTACT_STALE
+  PROPOSAL_EXPIRED
+  CUSTOMER_EVENT_NEAR
+}
+
+enum FollowUpAlertStatus {
+  OPEN
+  RESOLVED
+}
+
 model Salesperson {
   id            String        @id @default(uuid()) @db.Uuid
   name          String        @unique @db.VarChar(160)
@@ -56,6 +68,7 @@ model Opportunity {
   items              OpportunityItem[]
   stageTransitions   StageTransition[]
   activities         Activity[]
+  followUpAlerts     FollowUpAlert[]
 
   @@index([companyName])
   @@index([stage])
@@ -91,6 +104,23 @@ model Activity {
 
   @@index([opportunityId, occurredAt(sort: Desc), id(sort: Asc)])
   @@index([occurredAt(sort: Desc), id(sort: Asc)])
+}
+
+model FollowUpAlert {
+  id               String               @id @default(uuid()) @db.Uuid
+  opportunityId    String               @db.Uuid
+  type             FollowUpAlertType
+  status           FollowUpAlertStatus  @default(OPEN)
+  referenceAt      DateTime             @db.Timestamptz(3)
+  acknowledgedAt   DateTime?            @db.Timestamptz(3)
+  createdAt        DateTime             @default(now()) @db.Timestamptz(3)
+  resolvedAt       DateTime?            @db.Timestamptz(3)
+  opportunity      Opportunity          @relation(fields: [opportunityId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@index([opportunityId, createdAt(sort: Desc), id(sort: Asc)])
+  @@index([status, createdAt(sort: Desc), id(sort: Asc)])
+  @@index([type, status, createdAt(sort: Desc), id(sort: Asc)])
+  @@index([createdAt(sort: Desc), id(sort: Asc)])
 }
 
 model OpportunityItem {
