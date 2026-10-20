@@ -1,6 +1,55 @@
 import { evaluateTransition } from './pipeline-policy.js';
 
 describe('pipeline policy', () => {
+  const stages = [
+    'PRIMEIRO_CONTATO',
+    'APRESENTACAO_ORCAMENTO',
+    'FOLLOW_UP',
+    'FORECAST',
+    'FECHAMENTO',
+    'PERDIDA',
+  ] as const;
+  const activeStages = stages.slice(0, 4);
+
+  it.each(
+    stages.flatMap((from) =>
+      stages.map((to) => {
+        const fromIndex = activeStages.indexOf(
+          from as (typeof activeStages)[number],
+        );
+        const toIndex = activeStages.indexOf(
+          to as (typeof activeStages)[number],
+        );
+        const allowed =
+          (fromIndex >= 0 && to === 'PERDIDA') ||
+          (fromIndex >= 0 && to === 'FECHAMENTO' && from === 'FORECAST') ||
+          (fromIndex >= 0 &&
+            toIndex >= 0 &&
+            Math.abs(fromIndex - toIndex) === 1);
+        return [from, to, allowed] as const;
+      }),
+    ),
+  )(
+    'evaluates the complete transition matrix: %s -> %s',
+    (from, to, allowed) => {
+      const fromIndex = activeStages.indexOf(
+        from as (typeof activeStages)[number],
+      );
+      const toIndex = activeStages.indexOf(to as (typeof activeStages)[number]);
+      const reason =
+        to === 'PERDIDA' || (toIndex >= 0 && toIndex < fromIndex)
+          ? 'Justificativa'
+          : null;
+      const run = () => evaluateTransition(from, to, reason, true, true);
+
+      if (allowed) {
+        expect(run()).toEqual({ reason });
+      } else {
+        expect(run).toThrow();
+      }
+    },
+  );
+
   it.each([
     ['PRIMEIRO_CONTATO', 'APRESENTACAO_ORCAMENTO'],
     ['APRESENTACAO_ORCAMENTO', 'FOLLOW_UP'],

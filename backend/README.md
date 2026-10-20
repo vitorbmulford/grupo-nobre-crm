@@ -264,6 +264,8 @@ are not inferred.
 
 The supported types are `CALL`, `EMAIL`, `MEETING`, `WHATSAPP`, and `OTHER`. Each activity has a required non-blank description, interaction timestamp (`occurredAt`), creation timestamp, and required opportunity. Only create and list endpoints exist. Activities have no update/delete endpoint and are kept when an opportunity is soft-deleted. Foreign keys use `ON DELETE RESTRICT`.
 
+Activity timestamps and scheduled `nextFollowUpAt` values must include `Z` or an explicit UTC offset, so the API interprets them as stable instants regardless of the host timezone.
+
 | Method and path | Behavior |
 | --- | --- |
 | `POST /api/opportunities/:id/activities` | Register a completed interaction; rejects missing/deleted opportunities and future timestamps. |
@@ -388,8 +390,19 @@ npm run test:e2e
 ```
 
 The e2e suite requires the PostgreSQL service and the versioned migrations. The
-case seed does not create alert rows; alerts appear when the scheduler runs or
-when an integration test invokes the evaluator with a fixed time.
+suite also expects the case rows, including OPP-2001, so first apply migrations
+and run the idempotent seed in a dedicated test database:
+
+```bash
+npm run prisma:migrate:deploy
+npm run prisma:seed
+npm run test:e2e
+```
+
+Do not point e2e tests at an operational database: the suite creates and removes
+test rows and exercises database failures with temporary triggers. The case seed
+does not create alert rows; alerts appear when the scheduler runs or when an
+integration test invokes the evaluator with a fixed time.
 
 ## Technical decisions and limits
 

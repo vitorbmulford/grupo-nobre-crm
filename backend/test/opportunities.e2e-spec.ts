@@ -9,10 +9,12 @@ import { App } from 'supertest/types.js';
 import { AppModule } from '../src/app.module.js';
 import { PrismaService } from '../src/prisma/prisma.service.js';
 import { configureHttp } from '../src/http/configure-http.js';
+import { AlertsService } from '../src/alerts/alerts.service.js';
 
 describe('Opportunities API (PostgreSQL integration)', () => {
   let app: INestApplication<App>;
   let prisma: PrismaService;
+  let alerts: AlertsService;
   const runId = randomUUID();
   const companyPrefix = `Integration ${runId}`;
   const salespersonName = `Integration ${runId}`;
@@ -28,6 +30,7 @@ describe('Opportunities API (PostgreSQL integration)', () => {
     configureHttp(app, app.get(ConfigService));
     await app.init();
     prisma = app.get(PrismaService);
+    alerts = app.get(AlertsService);
     const salesperson = await prisma.salesperson.create({
       data: { name: salespersonName },
     });
@@ -41,6 +44,12 @@ describe('Opportunities API (PostgreSQL integration)', () => {
     });
     const ids = opportunities.map(({ id }) => id);
     if (ids.length) {
+      await prisma.followUpAlert.deleteMany({
+        where: { opportunityId: { in: ids } },
+      });
+      await prisma.activity.deleteMany({
+        where: { opportunityId: { in: ids } },
+      });
       await prisma.stageTransition.deleteMany({
         where: { opportunityId: { in: ids } },
       });
@@ -104,6 +113,14 @@ describe('Opportunities API (PostgreSQL integration)', () => {
     await request(app.getHttpServer())
       .post('/api/opportunities')
       .send(createBody('Valor inválido', { estimatedValue: '-1.00' }))
+      .expect(400);
+    await request(app.getHttpServer())
+      .post('/api/opportunities')
+      .send(
+        createBody('Retorno sem fuso', {
+          nextFollowUpAt: '2026-10-21T13:00:00',
+        }),
+      )
       .expect(400);
     await request(app.getHttpServer())
       .post('/api/opportunities')
@@ -266,6 +283,47 @@ describe('Opportunities API (PostgreSQL integration)', () => {
         },
       }),
     ).rejects.toMatchObject({ code: 'P2002' });
+  });
+
+  it('skips sequence values after collisions and failed inserts without reusing codes', async () => {
+    const [{ last_value: lastValue, is_called: isCalled }] =
+      await prisma.$queryRaw<Array<{ last_value: bigint; is_called: boolean }>>`
+        SELECT last_value, is_called FROM opportunity_code_seq
+      `;
+    const firstCandidate = isCalled ? lastValue + 1n : lastValue;
+    const reservedCode = `OPP-${String(firstCandidate).padStart(4, '0')}`;
+    await prisma.opportunity.create({
+      data: {
+        code: reservedCode,
+        companyName: `${companyPrefix} código reservado`,
+      },
+    });
+
+    await request(app.getHttpServer())
+      .post('/api/opportunities')
+      .send(createBody('colisão de sequência'))
+      .expect(409);
+    const afterCollision = await createOpportunity('após colisão');
+    expect(afterCollision.body.code).toBe(
+      `OPP-${String(firstCandidate + 1n).padStart(4, '0')}`,
+    );
+
+    await prisma.$executeRaw`CREATE OR REPLACE FUNCTION reject_opportunity_for_test() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'forced opportunity failure'; END $$`;
+    await prisma.$executeRaw`CREATE TRIGGER reject_opportunity_for_test BEFORE INSERT ON "Opportunity" FOR EACH ROW EXECUTE FUNCTION reject_opportunity_for_test()`;
+    try {
+      await request(app.getHttpServer())
+        .post('/api/opportunities')
+        .send(createBody('falha no insert'))
+        .expect(500);
+    } finally {
+      await prisma.$executeRaw`DROP TRIGGER IF EXISTS reject_opportunity_for_test ON "Opportunity"`;
+      await prisma.$executeRaw`DROP FUNCTION IF EXISTS reject_opportunity_for_test()`;
+    }
+
+    const afterFailedInsert = await createOpportunity('após rollback');
+    expect(afterFailedInsert.body.code).toBe(
+      `OPP-${String(firstCandidate + 3n).padStart(4, '0')}`,
+    );
   });
 
   it('moves sequentially, records history, and supports justified single-step returns', async () => {
@@ -432,6 +490,196 @@ describe('Opportunities API (PostgreSQL integration)', () => {
       .patch(`/api/opportunities/${created.body.id}/stage`)
       .send(payload)
       .expect(409);
+  });
+
+  it('allows only one concurrent PATCH using the same opportunity version', async () => {
+    const created = await createOpportunity('PATCH concorrente');
+    const responses = await Promise.all([
+      request(app.getHttpServer())
+        .patch(`/api/opportunities/${created.body.id}`)
+        .send({ version: 0, companyName: `${companyPrefix} edição A` }),
+      request(app.getHttpServer())
+        .patch(`/api/opportunities/${created.body.id}`)
+        .send({ version: 0, companyName: `${companyPrefix} edição B` }),
+    ]);
+    expect(
+      responses
+        .map((response) => response.status)
+        .sort((left, right) => left - right),
+    ).toEqual([200, 409]);
+    const current = await prisma.opportunity.findUniqueOrThrow({
+      where: { id: created.body.id },
+    });
+    expect(current.version).toBe(1);
+    expect([
+      `${companyPrefix} edição A`,
+      `${companyPrefix} edição B`,
+    ]).toContain(current.companyName);
+  });
+
+  it('serializes a PATCH against a stage transition on the same version', async () => {
+    const created = await createOpportunity('PATCH contra etapa');
+    const [commercialEdit, transition] = await Promise.all([
+      request(app.getHttpServer())
+        .patch(`/api/opportunities/${created.body.id}`)
+        .send({ version: 0, companyName: `${companyPrefix} editada` }),
+      request(app.getHttpServer())
+        .patch(`/api/opportunities/${created.body.id}/stage`)
+        .send({ toStage: 'APRESENTACAO_ORCAMENTO', version: 0 }),
+    ]);
+    expect(
+      [commercialEdit.status, transition.status].sort(
+        (left, right) => left - right,
+      ),
+    ).toEqual([200, 409]);
+    const current = await prisma.opportunity.findUniqueOrThrow({
+      where: { id: created.body.id },
+    });
+    expect(current.version).toBe(1);
+    expect(current.stage).toBe(
+      transition.status === 200 ? 'APRESENTACAO_ORCAMENTO' : 'PRIMEIRO_CONTATO',
+    );
+    expect(
+      await prisma.stageTransition.count({
+        where: { opportunityId: created.body.id },
+      }),
+    ).toBe(transition.status === 200 ? 1 : 0);
+  });
+
+  it('completes an integrated sale flow and resolves its open alert on closing', async () => {
+    const created = await createOpportunity('Fluxo venda completa', {
+      nextFollowUpAt: '2026-10-14T10:00:00.000Z',
+    });
+    const reference = new Date('2026-10-15T12:00:00.000Z');
+    expect(await alerts.evaluate(reference, [created.body.id])).toMatchObject({
+      created: 1,
+    });
+
+    let opportunity = (
+      await request(app.getHttpServer())
+        .patch(`/api/opportunities/${created.body.id}/stage`)
+        .send({ toStage: 'APRESENTACAO_ORCAMENTO', version: 0 })
+        .expect(200)
+    ).body;
+    opportunity = (
+      await request(app.getHttpServer())
+        .patch(`/api/opportunities/${created.body.id}/stage`)
+        .send({ toStage: 'FOLLOW_UP', version: opportunity.version })
+        .expect(200)
+    ).body;
+    await request(app.getHttpServer())
+      .post(`/api/opportunities/${created.body.id}/activities`)
+      .send({
+        type: 'CALL',
+        description: 'Cliente confirmou recebimento do orçamento',
+        occurredAt: '2026-10-15T10:00:00.000Z',
+      })
+      .expect(201);
+    const current = await prisma.opportunity.findUniqueOrThrow({
+      where: { id: created.body.id },
+      select: { version: true },
+    });
+    opportunity = (
+      await request(app.getHttpServer())
+        .patch(`/api/opportunities/${created.body.id}/stage`)
+        .send({ toStage: 'FORECAST', version: current.version })
+        .expect(200)
+    ).body;
+    opportunity = (
+      await request(app.getHttpServer())
+        .patch(`/api/opportunities/${created.body.id}/stage`)
+        .send({ toStage: 'FECHAMENTO', version: opportunity.version })
+        .expect(200)
+    ).body;
+
+    const history = await request(app.getHttpServer())
+      .get(`/api/opportunities/${created.body.id}/history`)
+      .expect(200);
+    expect(
+      history.body.map((entry: { toStage: string }) => entry.toStage),
+    ).toEqual([
+      'APRESENTACAO_ORCAMENTO',
+      'FOLLOW_UP',
+      'FORECAST',
+      'FECHAMENTO',
+    ]);
+    expect(await alerts.evaluate(reference, [created.body.id])).toMatchObject({
+      resolved: 1,
+    });
+    await request(app.getHttpServer())
+      .patch(`/api/opportunities/${created.body.id}/stage`)
+      .send({ toStage: 'PERDIDA', version: opportunity.version, reason: 'x' })
+      .expect(422);
+    expect(
+      await prisma.followUpAlert.count({
+        where: { opportunityId: created.body.id, status: 'OPEN' },
+      }),
+    ).toBe(0);
+  });
+
+  it('serializes a commercial patch against soft deletion', async () => {
+    const created = await createOpportunity('Patch contra exclusão');
+    const [patched, deleted] = await Promise.all([
+      request(app.getHttpServer())
+        .patch(`/api/opportunities/${created.body.id}`)
+        .send({ version: 0, companyName: `${companyPrefix} alterada` }),
+      request(app.getHttpServer()).delete(
+        `/api/opportunities/${created.body.id}`,
+      ),
+    ]);
+
+    expect([200, 404]).toContain(patched.status);
+    expect(deleted.status).toBe(204);
+    const stored = await prisma.opportunity.findUniqueOrThrow({
+      where: { id: created.body.id },
+      select: { deletedAt: true },
+    });
+    expect(stored.deletedAt).toBeInstanceOf(Date);
+    await request(app.getHttpServer())
+      .patch(`/api/opportunities/${created.body.id}`)
+      .send({ version: 0, companyName: 'Não pode alterar' })
+      .expect(404);
+  });
+
+  it('records a lost opportunity and prevents new alerts for the terminal stage', async () => {
+    const created = await createOpportunity('Fluxo oportunidade perdida', {
+      nextFollowUpAt: '2026-10-14T10:00:00.000Z',
+    });
+    await request(app.getHttpServer())
+      .post(`/api/opportunities/${created.body.id}/activities`)
+      .send({
+        type: 'EMAIL',
+        description: 'Cliente recusou a proposta',
+        occurredAt: '2026-10-15T10:00:00.000Z',
+      })
+      .expect(201);
+    const reference = new Date('2026-10-15T12:00:00.000Z');
+    expect(await alerts.evaluate(reference, [created.body.id])).toMatchObject({
+      created: 1,
+    });
+    const lost = await request(app.getHttpServer())
+      .patch(`/api/opportunities/${created.body.id}/stage`)
+      .send({
+        toStage: 'PERDIDA',
+        version: 1,
+        reason: 'Prazo de entrega incompatível',
+      })
+      .expect(200);
+    expect(lost.body.lossReason).toBe('Prazo de entrega incompatível');
+    expect(
+      await request(app.getHttpServer())
+        .get(`/api/opportunities/${created.body.id}/history`)
+        .expect(200),
+    ).toHaveProperty('body[0].toStage', 'PERDIDA');
+    expect(await alerts.evaluate(reference, [created.body.id])).toMatchObject({
+      created: 0,
+      resolved: 1,
+    });
+    expect(
+      await prisma.followUpAlert.count({
+        where: { opportunityId: created.body.id, status: 'OPEN' },
+      }),
+    ).toBe(0);
   });
 
   it('rolls back the stage update when PostgreSQL rejects the history insert', async () => {

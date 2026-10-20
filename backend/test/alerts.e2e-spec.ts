@@ -245,6 +245,58 @@ describe('Follow-up alerts API and reconciliation (PostgreSQL integration)', () 
     }
   });
 
+  it('reconciles an alert when soft deletion races scheduler evaluation', async () => {
+    const opportunity = await createOpportunity('scheduler contra exclusão', {
+      nextFollowUpAt: new Date('2026-10-14T10:00:00.000Z'),
+    });
+    const [, deletion] = await Promise.all([
+      alerts.evaluate(reference, [opportunity.id]),
+      request(app.getHttpServer()).delete(
+        `/api/opportunities/${opportunity.id}`,
+      ),
+    ]);
+    expect(deletion.status).toBe(204);
+    await alerts.evaluate(reference, [opportunity.id]);
+    expect(
+      await prisma.followUpAlert.count({
+        where: { opportunityId: opportunity.id, status: 'OPEN' },
+      }),
+    ).toBe(0);
+  });
+
+  it('keeps a manual acknowledgment when scheduler evaluation races resolution', async () => {
+    const opportunity = await createOpportunity(
+      'scheduler contra reconhecimento',
+      {
+        nextFollowUpAt: new Date('2026-10-14T10:00:00.000Z'),
+      },
+    );
+    await alerts.evaluate(reference, [opportunity.id]);
+    const alert = await prisma.followUpAlert.findFirstOrThrow({
+      where: { opportunityId: opportunity.id, status: 'OPEN' },
+    });
+
+    const [, resolution] = await Promise.all([
+      alerts.evaluate(reference, [opportunity.id]),
+      request(app.getHttpServer()).patch(`/api/alerts/${alert.id}/resolve`),
+    ]);
+    expect(resolution.status).toBe(200);
+    await alerts.evaluate(reference, [opportunity.id]);
+    expect(
+      await prisma.followUpAlert.count({
+        where: { opportunityId: opportunity.id, status: 'OPEN' },
+      }),
+    ).toBe(0);
+    expect(
+      await prisma.followUpAlert.count({
+        where: {
+          opportunityId: opportunity.id,
+          acknowledgedAt: { not: null },
+        },
+      }),
+    ).toBe(1);
+  });
+
   it('enforces the partial unique index when simultaneous inserts race', async () => {
     const opportunity = await createOpportunity('índice único');
     const create = () =>

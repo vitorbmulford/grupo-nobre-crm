@@ -108,6 +108,7 @@ describe('Activities API (PostgreSQL integration)', () => {
       '   ',
     ).expect(400);
     await post(opportunity.id, 'CALL', 'not-a-date').expect(400);
+    await post(opportunity.id, 'CALL', '2026-10-19T10:00:00').expect(400);
     await post(
       opportunity.id,
       'CALL',
@@ -271,5 +272,16 @@ describe('Activities API (PostgreSQL integration)', () => {
     await request(app.getHttpServer())
       .delete(`/api/opportunities/${preserved.id}/activities/${randomUUID()}`)
       .expect(404);
+
+    const racing = await createOpportunity('atividade contra exclusão');
+    const [activityResponse, deleteResponse] = await Promise.all([
+      post(racing.id, 'CALL', '2026-10-20T12:00:00.000Z'),
+      request(app.getHttpServer()).delete(`/api/opportunities/${racing.id}`),
+    ]);
+    expect([201, 404]).toContain(activityResponse.status);
+    expect(deleteResponse.status).toBe(204);
+    expect(
+      await prisma.activity.count({ where: { opportunityId: racing.id } }),
+    ).toBe(activityResponse.status === 201 ? 1 : 0);
   });
 });
