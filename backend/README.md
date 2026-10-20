@@ -94,6 +94,9 @@ the defaults. The Compose source variables are:
 | `PORT` | API listen port inside the container |
 | `LOG_LEVEL` | Pino threshold |
 | `CORS_ORIGINS` | Exact comma-separated browser origin allowlist |
+| `FOLLOW_UP_EVALUATION_INTERVAL_MS` | Automation interval in milliseconds (default 900000) |
+| `FOLLOW_UP_STALE_CONTACT_DAYS` | Inactivity window in UTC calendar days (default 7) |
+| `FOLLOW_UP_CUSTOMER_EVENT_WINDOW_DAYS` | Customer event window in calendar days (default 7) |
 | `POSTGRES_HOST` | Compose hostname used to construct the connection URL |
 | `POSTGRES_PORT` | PostgreSQL port inside the Compose network |
 | `POSTGRES_DB` | PostgreSQL database name |
@@ -156,9 +159,9 @@ estimated values, last contacts, proposal validity, and customer event dates.
 It creates the three listed sellers Ana, Bruno, and Carla. OPP-2001 has an
 intentionally blank proposal validity date. The case does not provide a loss
 reason for OPP-2007 or a next follow-up timestamp for any row; those values
-remain `null`. Future risk automation must use documented signals such as last
-contact, proposal validity, and customer event dates instead of assuming a
-follow-up timestamp exists. No transition history is generated.
+remain `null`. The follow-up risk automation uses last contact, proposal
+validity, customer event dates, and a scheduled return only when one is present.
+No transition history is generated.
 
 Run the seed after migrations with `npm run prisma:seed` from `backend/`. It
 ensures the three sellers exist and creates each of the seven fixed commercial
@@ -270,7 +273,123 @@ Both collection responses include pagination metadata (`page`, `limit`, `total`,
 
 All five activity types mean a contact was actually made. The service converts `occurredAt` to its UTC calendar date before writing `Opportunity.lastContactAt`, matching the PostgreSQL `DATE` column. A transaction locks the opportunity row, verifies it is still active, creates the activity, then conditionally advances `lastContactAt` only if it is null or earlier than the contact date. If the date advances, `version` increments once so existing optimistic-concurrency clients see the opportunity change; if the date is unchanged or older, `version` is untouched. The row lock serializes activity creation against other activities and soft deletion, while the conditional update keeps the date monotonic. This preserves seed-imported contact dates and does not fabricate historical activities. Closed and Lost opportunities can receive later contacts; their stage is never changed.
 
-This record can support a future follow-up automation by combining a contact history with proposal validity, event date, and an explicitly scheduled `nextFollowUpAt`. No automatic follow-up scheduling, alert, or notification is implemented here.
+Activities update `lastContactAt`; the follow-up risk automation below uses that date together with proposal validity, customer event dates, and explicitly scheduled `nextFollowUpAt` values.
+
+## Follow-up risk automation
+
+The selected case automation is preventing forgotten follow-ups. It directly
+addresses the case's fourth operational problem: helping salespeople organize
+returns when contact volume is high. Alerts are private CRM records for a future
+interface; they do not send email, WhatsApp, SMS, push messages, or other
+customer communications.
+
+`@nestjs/schedule` evaluates active opportunities every 15 minutes by default.
+The interval and date windows can be configured in the environment:
+
+| Variable | Default | Meaning |
+| --- | ---: | --- |
+| `FOLLOW_UP_EVALUATION_INTERVAL_MS` | `900000` | Evaluation interval in milliseconds; minimum 1 second. |
+| `FOLLOW_UP_STALE_CONTACT_DAYS` | `7` | A contact is stale only after more than this many UTC calendar days. |
+| `FOLLOW_UP_CUSTOMER_EVENT_WINDOW_DAYS` | `7` | Include events today through this many UTC calendar days ahead. |
+
+The pure risk policy receives an explicit evaluation instant. PostgreSQL `DATE`
+fields (`lastContactAt`, `proposalValidUntil`, and `customerEventDate`) are
+compared as UTC calendar dates, independent of the server timezone. The
+`nextFollowUpAt` timestamp is compared as an instant and is overdue at or before
+the evaluation time.
+
+The rules are independent, so an opportunity may have several different open
+alerts:
+
+| Type | Rule |
+| --- | --- |
+| `FOLLOW_UP_OVERDUE` | `nextFollowUpAt` is set and at or before the evaluation instant. |
+| `CONTACT_STALE` | No return is scheduled, `lastContactAt` is set, and it is more than 7 calendar days old by default. A null contact date is unknown; the system does not invent one or issue this alert. |
+| `PROPOSAL_EXPIRED` | `proposalValidUntil` is set and earlier than the evaluation date. |
+| `CUSTOMER_EVENT_NEAR` | `customerEventDate` is today through the next 7 calendar days; past events and null dates are ignored. |
+
+Only `PRIMEIRO_CONTATO`, `APRESENTACAO_ORCAMENTO`, `FOLLOW_UP`, and `FORECAST`
+are eligible. `FECHAMENTO`, `PERDIDA`, and soft-deleted opportunities receive
+no new alerts; existing open alerts are resolved at the next evaluation. Risk
+checks do not create activities, change the pipeline, or change commercial
+values.
+
+Each alert stores its type, status, reference date or instant, creation time,
+and optional resolution time. Resolved rows are retained as history. A
+PostgreSQL partial unique index allows at most one `OPEN` alert for an
+opportunity and type while permitting later occurrences after resolution.
+Evaluations reconcile open alerts: a changed reference resolves the old
+occurrence and creates the new one; a condition that disappears resolves its
+alert. A later recurrence can therefore create a new historical row.
+
+Manual resolution acknowledges the current occurrence by recording
+`acknowledgedAt`. Repeated resolution is idempotent. While the same type and
+reference remain at risk, the scheduler keeps the acknowledged occurrence
+resolved. Once the condition is absent or its reference changes, the
+acknowledgement is cleared; a future recurrence can create a new alert. This
+avoids a manual resolve being undone by the next scheduler run.
+
+The PostgreSQL row lock serializes reconciliation against edits to an
+individual opportunity, and the partial unique index handles duplicate-create
+conflicts. The in-process guard prevents overlapping runs in one API process.
+There is no scheduler-wide distributed lock or leader election: multiple API
+instances may scan the same opportunities and do extra work. The database
+constraint keeps open alerts unique; this setup targets a simple deployment.
+
+### Alert endpoints
+
+| Method and path | Behavior |
+| --- | --- |
+| `GET /api/alerts` | List open alerts by default; accepts `status`, `type`, `opportunityId`, `page`, and `limit`. Set `status=RESOLVED` to inspect history. |
+| `GET /api/opportunities/:opportunityId/alerts` | List all alert history for an active opportunity; `opportunityId` is the alert response's `opportunityId` (or nested `opportunity.id`), never the alert's own `id`. Supports `status`, `type`, and pagination; the path already scopes the opportunity. Soft-deleted or missing opportunities return 404. |
+| `PATCH /api/alerts/:alertId/resolve` | Resolve and acknowledge an open alert; `alertId` is the alert response's `id`, never `opportunityId`. Repeated calls return its existing resolved record. |
+
+Responses include the opportunity's `id`, code, company name, and current stage
+to identify the related CRM record without returning its full commercial data.
+Ordering is newest creation first, with ascending alert UUID as a deterministic
+tie-breaker. Swagger documents enums, filters, pagination, and responses at
+`/api/docs`.
+
+### Case-date examples
+
+Using the PDF's reference date, 15/10/2026, without changing the intentionally
+null `nextFollowUpAt` values:
+
+| Opportunity | Expected signals |
+| --- | --- |
+| OPP-2001 | None: contact was 14/10 and event is outside the window. |
+| OPP-2002 | `CONTACT_STALE` (contact 06/10) and `PROPOSAL_EXPIRED` (valid through 13/10). |
+| OPP-2003 | `CUSTOMER_EVENT_NEAR` (event 18/10). |
+| OPP-2004 | `CONTACT_STALE` (contact 02/10) and `PROPOSAL_EXPIRED` (valid through 10/10). |
+| OPP-2005 | None: contact was 15/10, proposal is valid, and event is distant. |
+| OPP-2006 and OPP-2007 | None: terminal stages are ineligible. |
+
+The other three automation choices from the case are documented here but not
+implemented in this feature:
+
+1. **Fast first contact / low SLA:** timestamp lead intake, define a response
+   target, show remaining time in the CRM, and alert the team or route overdue
+   unassigned leads using a configurable assignment rule.
+2. **Company research:** let a salesperson request company enrichment from
+   verified public business sources, show source and retrieval time, and save
+   reviewed facts to the opportunity. This needs a provider and data-quality
+   policy that are outside this CRM-only task.
+3. **Call script information:** present a structured call checklist and save
+   answers as typed fields or linked activity notes, so the next salesperson
+   can find the business context without reading an entire call description.
+
+### Testing the automation
+
+Risk policy boundaries use fixed instants and include 15/10/2026 examples:
+
+```bash
+npm test
+npm run test:e2e
+```
+
+The e2e suite requires the PostgreSQL service and the versioned migrations. The
+case seed does not create alert rows; alerts appear when the scheduler runs or
+when an integration test invokes the evaluator with a fixed time.
 
 ## Technical decisions and limits
 
@@ -283,7 +402,7 @@ services.
 
 Prisma migrations remain the deployment mechanism; the Compose migration
 service runs `prisma migrate deploy` and the idempotent case seed before the API.
-Authentication, automation, and a frontend are not implemented in this branch. The Swagger document also
+Authentication and a frontend are not implemented in this branch. The Swagger document also
 describes the existing health and starter root endpoints; test-only routes are
 not registered in the production application.
 
