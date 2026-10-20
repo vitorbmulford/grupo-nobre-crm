@@ -46,6 +46,7 @@ model Opportunity {
   updatedAt         DateTime         @updatedAt @db.Timestamptz(3)
   salesperson       Salesperson?     @relation(fields: [salespersonId], references: [id], onDelete: Restrict, onUpdate: Cascade)
   items             OpportunityItem[]
+  stageTransitions  StageTransition[]
 
   @@index([companyName])
   @@index([stage])
@@ -55,6 +56,19 @@ model Opportunity {
   @@index([stage, deletedAt])
   @@index([salespersonId, deletedAt])
   @@index([createdAt])
+}
+
+model StageTransition {
+  id            String           @id @default(uuid()) @db.Uuid
+  opportunityId String           @db.Uuid
+  fromStage     OpportunityStage?
+  toStage       OpportunityStage
+  reason        String?          @db.VarChar(1000)
+  changedAt     DateTime         @default(now()) @db.Timestamptz(3)
+  opportunity   Opportunity     @relation(fields: [opportunityId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@index([opportunityId, changedAt, id])
+  @@index([changedAt, id])
 }
 
 model OpportunityItem {

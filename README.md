@@ -57,3 +57,6 @@ Its endpoints and business rules are documented in
 delete: the API sets `deletedAt`, keeps its commercial code and items, and hides
 it from regular queries. There is no restore endpoint. The case PDF is a local
 input and is ignored by Git.
+Stage changes use a dedicated pipeline endpoint with optimistic concurrency and
+append-only transition history; the backend README documents its rules and
+examples.

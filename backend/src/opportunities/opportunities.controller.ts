@@ -30,6 +30,8 @@ import {
   OpportunityResponseDto,
 } from './dto/opportunity-response.dto.js';
 import { UpdateOpportunityDto } from './dto/update-opportunity.dto.js';
+import { TransitionStageDto } from './dto/transition-stage.dto.js';
+import { StageTransitionResponseDto } from './dto/stage-transition-response.dto.js';
 import { OpportunitiesService } from './opportunities.service.js';
 import { ApiErrorResponseDto } from '../http/api-error-response.dto.js';
 
@@ -63,6 +65,19 @@ export class OpportunitiesController {
   })
   findOne(@Param('id', ParseUUIDPipe) id: string) {
     return this.opportunities.findOne(id);
+  }
+
+  @Get(':id/history')
+  @ApiParam({ name: 'id', format: 'uuid' })
+  @ApiOperation({
+    summary: 'Consultar histórico de movimentações',
+    description:
+      'Retorna somente transições registradas pela aplicação, da mais antiga para a mais recente. Oportunidades excluídas retornam 404.',
+  })
+  @ApiOkResponse({ type: [StageTransitionResponseDto] })
+  @ApiNotFoundResponse({ type: ApiErrorResponseDto })
+  history(@Param('id', ParseUUIDPipe) id: string) {
+    return this.opportunities.history(id);
   }
 
   @Post()
@@ -113,6 +128,34 @@ export class OpportunitiesController {
     @Body() dto: UpdateOpportunityDto,
   ) {
     return this.opportunities.update(id, dto);
+  }
+
+  @Patch(':id/stage')
+  @ApiParam({ name: 'id', format: 'uuid' })
+  @ApiOperation({
+    summary: 'Mover oportunidade no funil',
+    description:
+      'Avanços são sequenciais. Entrar em APRESENTACAO_ORCAMENTO exige valor estimado e item de brinde. FECHAMENTO só vem de FORECAST. PERDIDA exige motivo. Retroceder uma etapa exige justificativa. Informe a version atual; versões antigas retornam 409.',
+  })
+  @ApiOkResponse({ type: OpportunityResponseDto })
+  @ApiBadRequestResponse({ type: ApiErrorResponseDto })
+  @ApiConflictResponse({
+    type: ApiErrorResponseDto,
+    description: 'A versão informada está desatualizada.',
+  })
+  @ApiNotFoundResponse({
+    type: ApiErrorResponseDto,
+    description: 'Oportunidade inexistente ou excluída.',
+  })
+  @ApiUnprocessableEntityResponse({
+    type: ApiErrorResponseDto,
+    description: 'A transição não atende às regras do funil.',
+  })
+  transitionStage(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: TransitionStageDto,
+  ) {
+    return this.opportunities.transitionStage(id, dto);
   }
 
   @Delete(':id')

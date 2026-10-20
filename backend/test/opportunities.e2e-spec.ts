@@ -41,6 +41,9 @@ describe('Opportunities API (PostgreSQL integration)', () => {
     });
     const ids = opportunities.map(({ id }) => id);
     if (ids.length) {
+      await prisma.stageTransition.deleteMany({
+        where: { opportunityId: { in: ids } },
+      });
       await prisma.opportunityItem.deleteMany({
         where: { opportunityId: { in: ids } },
       });
@@ -60,10 +63,13 @@ describe('Opportunities API (PostgreSQL integration)', () => {
     };
   }
 
-  async function createOpportunity(suffix: string) {
+  async function createOpportunity(
+    suffix: string,
+    extra: Record<string, unknown> = {},
+  ) {
     return request(app.getHttpServer())
       .post('/api/opportunities')
-      .send(createBody(suffix))
+      .send(createBody(suffix, extra))
       .expect(201);
   }
 
@@ -262,6 +268,229 @@ describe('Opportunities API (PostgreSQL integration)', () => {
     ).rejects.toMatchObject({ code: 'P2002' });
   });
 
+  it('moves sequentially, records history, and supports justified single-step returns', async () => {
+    const created = await createOpportunity('Funil sequencial');
+    const id = created.body.id as string;
+    const move = (toStage: string, version: number, reason?: string) =>
+      request(app.getHttpServer())
+        .patch(`/api/opportunities/${id}/stage`)
+        .send({ toStage, version, ...(reason ? { reason } : {}) });
+
+    const budget = await move('APRESENTACAO_ORCAMENTO', 0).expect(200);
+    expect(budget.body).toMatchObject({
+      stage: 'APRESENTACAO_ORCAMENTO',
+      version: 1,
+    });
+    const followUp = await move('FOLLOW_UP', 1).expect(200);
+    const forecast = await move('FORECAST', 2).expect(200);
+    const returned = await move('FOLLOW_UP', 3, 'Cliente pediu revisão').expect(
+      200,
+    );
+    expect(returned.body).toMatchObject({ stage: 'FOLLOW_UP', version: 4 });
+
+    const history = await request(app.getHttpServer())
+      .get(`/api/opportunities/${id}/history`)
+      .expect(200);
+    expect(history.body).toHaveLength(4);
+    expect(
+      history.body.map((item: { toStage: string }) => item.toStage),
+    ).toEqual(['APRESENTACAO_ORCAMENTO', 'FOLLOW_UP', 'FORECAST', 'FOLLOW_UP']);
+    expect(history.body[3]).toMatchObject({
+      fromStage: 'FORECAST',
+      reason: 'Cliente pediu revisão',
+    });
+    expect(followUp.body.stage).toBe('FOLLOW_UP');
+    expect(forecast.body.stage).toBe('FORECAST');
+  });
+
+  it('enforces transition prerequisites, terminal rules, loss reason, and soft deletion', async () => {
+    const noValue = await createOpportunity('Sem valor', {
+      estimatedValue: null,
+    });
+    await request(app.getHttpServer())
+      .patch(`/api/opportunities/${noValue.body.id}/stage`)
+      .send({ toStage: 'APRESENTACAO_ORCAMENTO', version: 0 })
+      .expect(422);
+    expect(
+      await prisma.stageTransition.count({
+        where: { opportunityId: noValue.body.id },
+      }),
+    ).toBe(0);
+
+    const noItems = await createOpportunity('Sem brinde', { items: [] });
+    await request(app.getHttpServer())
+      .patch(`/api/opportunities/${noItems.body.id}/stage`)
+      .send({ toStage: 'APRESENTACAO_ORCAMENTO', version: 0 })
+      .expect(422);
+
+    const opportunity = await createOpportunity('Regras inválidas');
+    const transition = (toStage: string, reason?: string) =>
+      request(app.getHttpServer())
+        .patch(`/api/opportunities/${opportunity.body.id}/stage`)
+        .send({ toStage, version: 0, ...(reason ? { reason } : {}) });
+    await transition('FORECAST').expect(422);
+    await transition('PRIMEIRO_CONTATO').expect(422);
+    await transition('PERDIDA', '   ').expect(422);
+    await transition('APRESENTACAO_ORCAMENTO').expect(200);
+    await request(app.getHttpServer())
+      .patch(`/api/opportunities/${opportunity.body.id}/stage`)
+      .send({ toStage: 'FOLLOW_UP', version: 1 })
+      .expect(200);
+    await request(app.getHttpServer())
+      .patch(`/api/opportunities/${opportunity.body.id}/stage`)
+      .send({ toStage: 'APRESENTACAO_ORCAMENTO', version: 2 })
+      .expect(422);
+    await request(app.getHttpServer())
+      .patch(`/api/opportunities/${opportunity.body.id}/stage`)
+      .send({ toStage: 'PERDIDA', version: 2, reason: 'Sem orçamento' })
+      .expect(200);
+    await request(app.getHttpServer())
+      .patch(`/api/opportunities/${opportunity.body.id}/stage`)
+      .send({ toStage: 'PRIMEIRO_CONTATO', version: 3, reason: 'Reabrir' })
+      .expect(422);
+
+    const deleted = await createOpportunity('Excluída antes da transição');
+    await request(app.getHttpServer())
+      .delete(`/api/opportunities/${deleted.body.id}`)
+      .expect(204);
+    await request(app.getHttpServer())
+      .patch(`/api/opportunities/${deleted.body.id}/stage`)
+      .send({ toStage: 'PERDIDA', version: 0, reason: 'Motivo' })
+      .expect(404);
+    await request(app.getHttpServer())
+      .get(`/api/opportunities/${deleted.body.id}/history`)
+      .expect(404);
+  });
+
+  it('allows loss from every active stage and closing only from forecast', async () => {
+    const stages = [
+      'PRIMEIRO_CONTATO',
+      'APRESENTACAO_ORCAMENTO',
+      'FOLLOW_UP',
+      'FORECAST',
+    ] as const;
+    for (const [index, stage] of stages.entries()) {
+      const created = await createOpportunity(`Perda ${index}`);
+      if (stage !== 'PRIMEIRO_CONTATO') {
+        await prisma.opportunity.update({
+          where: { id: created.body.id },
+          data: { stage, version: 8 },
+        });
+      }
+      const lost = await request(app.getHttpServer())
+        .patch(`/api/opportunities/${created.body.id}/stage`)
+        .send({
+          toStage: 'PERDIDA',
+          version: stage === 'PRIMEIRO_CONTATO' ? 0 : 8,
+          reason: 'Sem interesse',
+        })
+        .expect(200);
+      expect(lost.body.lossReason).toBe('Sem interesse');
+      const [history] = await prisma.stageTransition.findMany({
+        where: { opportunityId: created.body.id },
+      });
+      expect(history?.reason).toBe('Sem interesse');
+    }
+
+    const closing = await createOpportunity('Fechamento após forecast');
+    await prisma.opportunity.update({
+      where: { id: closing.body.id },
+      data: { stage: 'FORECAST', version: 7 },
+    });
+    await request(app.getHttpServer())
+      .patch(`/api/opportunities/${closing.body.id}/stage`)
+      .send({ toStage: 'FECHAMENTO', version: 7 })
+      .expect(200);
+    await request(app.getHttpServer())
+      .patch(`/api/opportunities/${closing.body.id}/stage`)
+      .send({ toStage: 'PERDIDA', version: 8, reason: 'Cancelou' })
+      .expect(422);
+  });
+
+  it('rejects stale and concurrent versions with a single transition record', async () => {
+    const created = await createOpportunity('Concorrência de transição');
+    const payload = { toStage: 'APRESENTACAO_ORCAMENTO', version: 0 };
+    const responses = await Promise.all([
+      request(app.getHttpServer())
+        .patch(`/api/opportunities/${created.body.id}/stage`)
+        .send(payload),
+      request(app.getHttpServer())
+        .patch(`/api/opportunities/${created.body.id}/stage`)
+        .send(payload),
+    ]);
+    expect(
+      responses
+        .map((response) => response.status)
+        .sort((left, right) => left - right),
+    ).toEqual([200, 409]);
+    expect(
+      await prisma.stageTransition.count({
+        where: { opportunityId: created.body.id },
+      }),
+    ).toBe(1);
+    await request(app.getHttpServer())
+      .patch(`/api/opportunities/${created.body.id}/stage`)
+      .send(payload)
+      .expect(409);
+  });
+
+  it('rolls back the stage update when PostgreSQL rejects the history insert', async () => {
+    const created = await createOpportunity('Atomicidade do histórico');
+    await prisma.$executeRaw`CREATE OR REPLACE FUNCTION reject_stage_transition_for_test() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'forced history failure'; END $$`;
+    await prisma.$executeRaw`CREATE TRIGGER reject_stage_transition_for_test BEFORE INSERT ON "StageTransition" FOR EACH ROW EXECUTE FUNCTION reject_stage_transition_for_test()`;
+    try {
+      await request(app.getHttpServer())
+        .patch(`/api/opportunities/${created.body.id}/stage`)
+        .send({ toStage: 'APRESENTACAO_ORCAMENTO', version: 0 })
+        .expect(500);
+      const current = await prisma.opportunity.findUniqueOrThrow({
+        where: { id: created.body.id },
+      });
+      expect(current).toMatchObject({ stage: 'PRIMEIRO_CONTATO', version: 0 });
+      expect(
+        await prisma.stageTransition.count({
+          where: { opportunityId: created.body.id },
+        }),
+      ).toBe(0);
+    } finally {
+      await prisma.$executeRaw`DROP TRIGGER IF EXISTS reject_stage_transition_for_test ON "StageTransition"`;
+      await prisma.$executeRaw`DROP FUNCTION IF EXISTS reject_stage_transition_for_test()`;
+    }
+  });
+
+  it('prevents common edits from removing established budget data while allowing legacy gaps', async () => {
+    const normal = await createOpportunity('Dados comerciais protegidos');
+    await request(app.getHttpServer())
+      .patch(`/api/opportunities/${normal.body.id}/stage`)
+      .send({ toStage: 'APRESENTACAO_ORCAMENTO', version: 0 })
+      .expect(200);
+    await request(app.getHttpServer())
+      .patch(`/api/opportunities/${normal.body.id}`)
+      .send({
+        version: 1,
+        companyName: normal.body.companyName,
+        estimatedValue: null,
+      })
+      .expect(422);
+    await request(app.getHttpServer())
+      .patch(`/api/opportunities/${normal.body.id}`)
+      .send({ version: 1, companyName: normal.body.companyName, items: [] })
+      .expect(422);
+
+    const legacy = await prisma.opportunity.create({
+      data: {
+        code: `OPP-LEGACY-${randomUUID().slice(0, 8)}`,
+        companyName: `${companyPrefix} histórico incompleto`,
+        stage: 'APRESENTACAO_ORCAMENTO',
+      },
+    });
+    const edited = await request(app.getHttpServer())
+      .patch(`/api/opportunities/${legacy.id}`)
+      .send({ version: 0, companyName: `${companyPrefix} histórico editado` })
+      .expect(200);
+    expect(edited.body.companyName).toBe(`${companyPrefix} histórico editado`);
+  });
+
   it('lists sellers and preserves seeded records and item IDs on repeated seed runs', async () => {
     const databaseUrl = process.env.DATABASE_URL;
     if (!databaseUrl)
@@ -330,6 +559,11 @@ describe('Opportunities API (PostgreSQL integration)', () => {
           request(app.getHttpServer()).get('/api/salespeople').expect(200),
         ]);
       expect(count).toBe(7);
+      expect(
+        await prisma.stageTransition.count({
+          where: { opportunity: { code: { in: codes } } },
+        }),
+      ).toBe(0);
       expect(afterReruns).toMatchObject({
         companyName: `${companyPrefix} alterada depois da seed`,
         stage: original.stage,
