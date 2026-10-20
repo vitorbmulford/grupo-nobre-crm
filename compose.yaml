@@ -1,0 +1,93 @@
+name: grupo-nobre-crm
+
+x-backend-build: &backend-build
+  context: ./backend
+  dockerfile: Dockerfile
+
+services:
+  postgres:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-grupo_nobre_crm}
+      POSTGRES_USER: ${POSTGRES_USER:-grupo_nobre}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-local_dev_password}
+      POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+    command: ["postgres", "-p", "${POSTGRES_PORT:-5432}"]
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:${POSTGRES_HOST_PORT:-5436}:${POSTGRES_PORT:-5432}"
+    networks:
+      app_local_access: {}
+      app_internal:
+        aliases:
+          - ${POSTGRES_HOST:-postgres}
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          'pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}" -p "$${POSTGRES_PORT}"',
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
+  migrate:
+    build:
+      <<: *backend-build
+      target: migrate
+    restart: "no"
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-grupo_nobre}:${POSTGRES_PASSWORD:-local_dev_password}@${POSTGRES_HOST:-postgres}:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-grupo_nobre_crm}?schema=public
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - app_internal
+
+  backend:
+    build:
+      <<: *backend-build
+      target: runtime
+    restart: unless-stopped
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: ${PORT:-3001}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-grupo_nobre}:${POSTGRES_PASSWORD:-local_dev_password}@${POSTGRES_HOST:-postgres}:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-grupo_nobre_crm}?schema=public
+    ports:
+      - "127.0.0.1:${BACKEND_HOST_PORT:-3001}:${PORT:-3001}"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    networks:
+      - app_internal
+      - app_ingress
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:' + process.env.PORT + '/api/health').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))"
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 15s
+
+volumes:
+  postgres_data:
+
+networks:
+  app_internal:
+    internal: true
+    name: grupo-nobre-crm_internal
+  app_local_access:
+    name: grupo-nobre-crm_local_access
+  app_ingress:
+    driver: bridge
