@@ -27,7 +27,11 @@ export class CreateActivityDto {
   @ApiProperty({
     format: 'date-time',
     example: '2026-10-20T14:30:00.000Z',
+    description: 'Timestamp ISO 8601 com Z ou offset explícito.',
   })
   @IsDateString({ strict: true })
+  @Matches(/(?:Z|[+-]\d{2}:\d{2})$/i, {
+    message: 'occurredAt must include a timezone offset',
+  })
   occurredAt!: string;
 }

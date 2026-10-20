@@ -129,6 +129,7 @@ export class AlertsService {
     let created = 0;
     let maintained = 0;
     let resolved = 0;
+    let failed = 0;
     for (const { id } of candidates) {
       try {
         const result = await this.reconcileOpportunity(id, evaluatedAt);
@@ -137,11 +138,17 @@ export class AlertsService {
         resolved += result.resolved;
       } catch (error) {
         if (isUniqueConflict(error)) {
-          // The partial unique index is the final guard if another process won.
           maintained += 1;
           continue;
         }
-        throw error;
+        failed += 1;
+        this.logger.error(
+          {
+            opportunityId: id,
+            errorName: error instanceof Error ? error.name : 'UnknownError',
+          },
+          'Follow-up alert reconciliation failed for opportunity',
+        );
       }
     }
 
@@ -150,6 +157,7 @@ export class AlertsService {
       created,
       maintained,
       resolved,
+      failed,
     };
     this.logger.info(counts, 'Follow-up alert evaluation completed');
     return counts;
