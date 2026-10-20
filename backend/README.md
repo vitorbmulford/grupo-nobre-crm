@@ -255,6 +255,23 @@ codes; HTTP 422 for an unknown seller; and logical deletion without restoration.
 Null optional fields are returned as JSON `null`. The case sheet's blank values
 are not inferred.
 
+## Commercial activities
+
+`Activity` is the append-only record of a commercial interaction with a client. `StageTransition` records only changes to the pipeline stage; registering a call or message never moves an opportunity or creates a transition. The case PDF emphasizes follow-up as a sales risk, but does not specify an interaction-history entity or HTTP contract. This activity module and its `lastContactAt` synchronization are complementary implementation choices. The `WHATSAPP` type is a manual CRM note and does not integrate with WhatsApp.
+
+The supported types are `CALL`, `EMAIL`, `MEETING`, `WHATSAPP`, and `OTHER`. Each activity has a required non-blank description, interaction timestamp (`occurredAt`), creation timestamp, and required opportunity. Only create and list endpoints exist. Activities have no update/delete endpoint and are kept when an opportunity is soft-deleted. Foreign keys use `ON DELETE RESTRICT`.
+
+| Method and path | Behavior |
+| --- | --- |
+| `POST /api/opportunities/:id/activities` | Register a completed interaction; rejects missing/deleted opportunities and future timestamps. |
+| `GET /api/opportunities/:id/activities` | List activity records for an active opportunity, newest first; accepts `type`, `page`, and `limit`. |
+
+Both collection responses include pagination metadata (`page`, `limit`, `total`, `totalPages`). Ordering is `occurredAt DESC, id ASC`, making tied timestamps stable. List responses remain scoped to the requested opportunity and never include stage transitions.
+
+All five activity types mean a contact was actually made. The service converts `occurredAt` to its UTC calendar date before writing `Opportunity.lastContactAt`, matching the PostgreSQL `DATE` column. A transaction locks the opportunity row, verifies it is still active, creates the activity, then conditionally advances `lastContactAt` only if it is null or earlier than the contact date. If the date advances, `version` increments once so existing optimistic-concurrency clients see the opportunity change; if the date is unchanged or older, `version` is untouched. The row lock serializes activity creation against other activities and soft deletion, while the conditional update keeps the date monotonic. This preserves seed-imported contact dates and does not fabricate historical activities. Closed and Lost opportunities can receive later contacts; their stage is never changed.
+
+This record can support a future follow-up automation by combining a contact history with proposal validity, event date, and an explicitly scheduled `nextFollowUpAt`. No automatic follow-up scheduling, alert, or notification is implemented here.
+
 ## Technical decisions and limits
 
 NestJS supplies the module, dependency-injection, lifecycle, and HTTP
@@ -266,8 +283,7 @@ services.
 
 Prisma migrations remain the deployment mechanism; the Compose migration
 service runs `prisma migrate deploy` and the idempotent case seed before the API.
-Authentication, state transitions, transition history, activities, automation,
-and a frontend are not implemented in this branch. The Swagger document also
+Authentication, automation, and a frontend are not implemented in this branch. The Swagger document also
 describes the existing health and starter root endpoints; test-only routes are
 not registered in the production application.
 

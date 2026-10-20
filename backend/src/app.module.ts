@@ -11,6 +11,7 @@ import { PrismaModule } from './prisma/prisma.module.js';
 import { ApiExceptionFilter } from './http/api-exception.filter.js';
 import { OpportunitiesModule } from './opportunities/opportunities.module.js';
 import { SalespeopleModule } from './salespeople/salespeople.module.js';
+import { ActivitiesModule } from './activities/activities.module.js';
 
 @Module({
   imports: [
@@ -117,6 +118,7 @@ import { SalespeopleModule } from './salespeople/salespeople.module.js';
     HealthModule,
     OpportunitiesModule,
     SalespeopleModule,
+    ActivitiesModule,
   ],
   controllers: [AppController],
   providers: [

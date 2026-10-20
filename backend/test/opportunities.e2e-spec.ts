@@ -501,6 +501,15 @@ describe('Opportunities API (PostgreSQL integration)', () => {
         env: { ...process.env, DATABASE_URL: databaseUrl },
         stdio: 'ignore',
       });
+    const seededTransitionCount = await prisma.stageTransition.count({
+      where: {
+        opportunity: {
+          code: {
+            in: Array.from({ length: 7 }, (_, index) => `OPP-${2001 + index}`),
+          },
+        },
+      },
+    });
     runSeed('prisma:seed');
 
     const codes = Array.from(
@@ -563,7 +572,7 @@ describe('Opportunities API (PostgreSQL integration)', () => {
         await prisma.stageTransition.count({
           where: { opportunity: { code: { in: codes } } },
         }),
-      ).toBe(0);
+      ).toBe(seededTransitionCount);
       expect(afterReruns).toMatchObject({
         companyName: `${companyPrefix} alterada depois da seed`,
         stage: original.stage,
