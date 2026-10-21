@@ -1,15 +1,32 @@
-import { queryOptions } from "@tanstack/react-query";
+import { infiniteQueryOptions, queryOptions } from "@tanstack/react-query";
 import { api } from "@/lib/api/client";
 import type {
   FollowUpAlert,
   Opportunity,
   OpportunityListResponse,
+  OpportunityStage,
   PageResponse,
   Salesperson,
 } from "@/types/api";
 
 export const queryKeys = {
   opportunities: ["opportunities"] as const,
+  pipeline: ["opportunities", "pipeline"] as const,
+  pipelineStage: (
+    stage: OpportunityStage,
+    search: string,
+    salespersonId: string,
+    limit: number,
+  ) =>
+    [
+      "opportunities",
+      "pipeline",
+      "stage",
+      stage,
+      search,
+      salespersonId,
+      limit,
+    ] as const,
   opportunityList: (filters: OpportunityListFilters) =>
     ["opportunities", "list", filters] as const,
   opportunity: (id: string) => ["opportunities", "detail", id] as const,
@@ -50,28 +67,39 @@ export const salespeopleQuery = queryOptions({
     api.get<Salesperson[]>("/salespeople", undefined, signal),
 });
 
-export const pipelineOpportunitiesQuery = queryOptions({
-  queryKey: ["opportunities", "pipeline"] as const,
-  queryFn: async ({ signal }) => {
-    const firstPage = await api.get<OpportunityListResponse>(
-      "/opportunities",
-      { page: 1, limit: 100 },
-      signal,
-    );
-    const opportunities = [...firstPage.data];
-
-    for (let page = 2; page <= firstPage.meta.totalPages; page += 1) {
-      const response = await api.get<OpportunityListResponse>(
+export const pipelineStageQuery = ({
+  stage,
+  search,
+  salespersonId,
+  limit,
+}: {
+  stage: OpportunityStage;
+  search: string;
+  salespersonId: string;
+  limit: number;
+}) =>
+  infiniteQueryOptions({
+    queryKey: queryKeys.pipelineStage(stage, search, salespersonId, limit),
+    initialPageParam: 1,
+    queryFn: ({ pageParam, signal }) =>
+      api.get<OpportunityListResponse>(
         "/opportunities",
-        { page, limit: 100 },
+        {
+          page: pageParam,
+          limit,
+          stage,
+          search: search || undefined,
+          salespersonId: salespersonId || undefined,
+          sortBy: "updatedAt",
+          sortOrder: "desc",
+        },
         signal,
-      );
-      opportunities.push(...response.data);
-    }
-
-    return opportunities;
-  },
-});
+      ),
+    getNextPageParam: (lastPage) =>
+      lastPage.meta.page < lastPage.meta.totalPages
+        ? lastPage.meta.page + 1
+        : undefined,
+  });
 
 export const openAlertsQuery = queryOptions({
   queryKey: queryKeys.alerts,

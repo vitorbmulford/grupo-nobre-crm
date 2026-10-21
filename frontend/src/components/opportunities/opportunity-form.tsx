@@ -38,6 +38,10 @@ import {
   updateOpportunity,
 } from "@/lib/api/opportunity-mutations";
 import {
+  getInternalReturnTo,
+  getOpportunityBackLabel,
+} from "@/lib/navigation";
+import {
   formatConflictMessage,
   opportunityFormSchema,
   opportunityToFormValues,
@@ -47,7 +51,13 @@ import {
   type OpportunityFormValues,
 } from "@/lib/opportunity-form";
 
-export function OpportunityForm({ opportunityId }: { opportunityId?: string }) {
+export function OpportunityForm({
+  opportunityId,
+  returnTo: requestedReturnTo,
+}: {
+  opportunityId?: string;
+  returnTo?: string;
+}) {
   const router = useRouter();
   const queryClient = useQueryClient();
   const detail = useQuery({
@@ -128,14 +138,8 @@ export function OpportunityForm({ opportunityId }: { opportunityId?: string }) {
     );
   }
 
-  const backHref =
-    opportunityId && opportunity
-      ? `/opportunities/${opportunityId}`
-      : "/opportunities";
-  const backLabel =
-    opportunityId && opportunity
-      ? `Voltar para ${opportunity.companyName}`
-      : "Voltar para oportunidades";
+  const backHref = getInternalReturnTo(requestedReturnTo);
+  const backLabel = getOpportunityBackLabel(backHref, opportunity?.companyName);
 
   if (opportunityId && detail.isPending)
     return (

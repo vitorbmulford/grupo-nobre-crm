@@ -353,13 +353,15 @@ function SidebarFooter({ className, ...props }: React.ComponentProps<"div">) {
 
 function SidebarSeparator({
   className,
+  style,
   ...props
 }: React.ComponentProps<typeof Separator>) {
   return (
     <Separator
       data-slot="sidebar-separator"
       data-sidebar="separator"
-      className={cn("bg-sidebar-border mx-2 w-auto", className)}
+      className={cn("bg-sidebar-border mx-2", className)}
+      style={{ ...style, width: "calc(100% - 1rem)" }}
       {...props}
     />
   );

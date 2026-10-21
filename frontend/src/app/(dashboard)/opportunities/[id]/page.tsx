@@ -2,9 +2,14 @@ import { OpportunityDetails } from "@/components/opportunities/opportunity-detai
 
 export default async function OpportunityDetailsPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ returnTo?: string | string[] }>;
 }) {
-  const { id } = await params;
-  return <OpportunityDetails id={id} />;
+  const [{ id }, query] = await Promise.all([params, searchParams]);
+  const returnTo = Array.isArray(query.returnTo)
+    ? query.returnTo[0]
+    : query.returnTo;
+  return <OpportunityDetails id={id} returnTo={returnTo} />;
 }

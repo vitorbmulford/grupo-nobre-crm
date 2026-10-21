@@ -4,9 +4,9 @@ import type { OpportunityStage } from "@/types/api";
 
 const tones: Record<OpportunityStage, string> = {
   PRIMEIRO_CONTATO:
-    "border-border bg-muted/60 text-muted-foreground dark:border-border dark:bg-muted/50 dark:text-muted-foreground",
+    "border-cyan-300 bg-cyan-100 text-cyan-900 dark:border-cyan-800 dark:bg-cyan-950/70 dark:text-cyan-200",
   APRESENTACAO_ORCAMENTO:
-    "border-border bg-muted/60 text-foreground dark:border-border dark:bg-muted/50",
+    "border-blue-300 bg-blue-100 text-blue-900 dark:border-blue-800 dark:bg-blue-950/70 dark:text-blue-200",
   FOLLOW_UP:
     "border-[#e1be68]/60 bg-[#e1be68]/15 text-[#6d5519] dark:border-[#e1be68]/30 dark:bg-[#e1be68]/10 dark:text-[#e1be68]",
   FORECAST:

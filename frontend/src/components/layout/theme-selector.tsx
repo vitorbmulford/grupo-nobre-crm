@@ -35,7 +35,11 @@ export function ThemeSelector() {
     <DropdownMenu>
       <DropdownMenuTrigger
         render={
-          <SidebarMenuButton title="Aparência" aria-label="Selecionar tema">
+          <SidebarMenuButton
+            title="Aparência"
+            aria-label="Selecionar tema"
+            className="h-10 rounded-lg px-3 text-[14px] group-data-[collapsible=icon]:size-9! group-data-[collapsible=icon]:p-2!"
+          >
             <SunMoon />
             <span>Aparência</span>
           </SidebarMenuButton>
