@@ -13,6 +13,7 @@ import { ListOpportunitiesQueryDto } from './dto/list-opportunities-query.dto.js
 import { TransitionStageDto } from './dto/transition-stage.dto.js';
 import { UpdateOpportunityDto } from './dto/update-opportunity.dto.js';
 import { evaluateTransition } from './pipeline/pipeline-policy.js';
+import { RealtimeService } from '../realtime/realtime.service.js';
 
 const opportunityRelations = {
   salesperson: true,
@@ -24,7 +25,10 @@ type OpportunityWithRelations = Prisma.OpportunityGetPayload<{
 
 @Injectable()
 export class OpportunitiesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly realtime: RealtimeService,
+  ) {}
 
   async list(query: ListOpportunitiesQueryDto) {
     const page = query.page ?? 1;
@@ -89,7 +93,7 @@ export class OpportunitiesService {
 
   async create(dto: CreateOpportunityDto) {
     try {
-      return await this.prisma.$transaction(async (transaction) => {
+      const opportunity = await this.prisma.$transaction(async (transaction) => {
         const [nextCode] = await transaction.$queryRaw<
           Array<{ value: bigint }>
         >`
@@ -122,6 +126,11 @@ export class OpportunitiesService {
         });
         return serializeOpportunity(opportunity);
       });
+      this.realtime.publish('opportunity:created', {
+        opportunityId: opportunity.id,
+        version: opportunity.version,
+      });
+      return opportunity;
     } catch (error) {
       throw mapPrismaError(error);
     }
@@ -129,7 +138,7 @@ export class OpportunitiesService {
 
   async update(id: string, dto: UpdateOpportunityDto) {
     try {
-      return await this.prisma.$transaction(async (transaction) => {
+      const opportunity = await this.prisma.$transaction(async (transaction) => {
         const { version, items, ...fields } = dto;
         const current = await transaction.opportunity.findFirst({
           where: { id, deletedAt: null },
@@ -242,6 +251,11 @@ export class OpportunitiesService {
         });
         return serializeOpportunity(opportunity);
       });
+      this.realtime.publish('opportunity:updated', {
+        opportunityId: opportunity.id,
+        version: opportunity.version,
+      });
+      return opportunity;
     } catch (error) {
       throw mapPrismaError(error);
     }
@@ -249,7 +263,7 @@ export class OpportunitiesService {
 
   async transitionStage(id: string, dto: TransitionStageDto) {
     try {
-      return await this.prisma.$transaction(async (transaction) => {
+      const opportunity = await this.prisma.$transaction(async (transaction) => {
         const current = await transaction.opportunity.findFirst({
           where: { id, deletedAt: null },
           include: { items: true },
@@ -314,6 +328,11 @@ export class OpportunitiesService {
         });
         return serializeOpportunity(opportunity);
       });
+      this.realtime.publish('opportunity:stage-changed', {
+        opportunityId: opportunity.id,
+        version: opportunity.version,
+      });
+      return opportunity;
     } catch (error) {
       throw mapPrismaError(error);
     }
@@ -343,7 +362,10 @@ export class OpportunitiesService {
       where: { id, deletedAt: null },
       data: { deletedAt: new Date(), version: { increment: 1 } },
     });
-    if (result.count === 1) return;
+    if (result.count === 1) {
+      this.realtime.publish('opportunity:deleted', { opportunityId: id });
+      return;
+    }
 
     const existing = await this.prisma.opportunity.findUnique({
       where: { id },

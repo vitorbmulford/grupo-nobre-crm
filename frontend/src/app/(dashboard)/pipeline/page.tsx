@@ -36,7 +36,6 @@ import {
   Info,
   LoaderCircle,
   MoveRight,
-  RefreshCw,
   RotateCcw,
   X,
 } from "lucide-react";
@@ -275,7 +274,6 @@ export default function PipelinePage() {
           ) ?? 0),
     0,
   );
-  const isFetching = stageQueries.some((stageQuery) => stageQuery.isFetching);
   const hasFilters = Boolean(
     searchDraft.trim() || salespersonId || !showClosed,
   );
@@ -442,20 +440,6 @@ export default function PipelinePage() {
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" onClick={() => setRulesOpen(true)}>
               <Info className="mr-2 size-4" /> Regras do funil
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() =>
-                void queryClient.invalidateQueries({
-                  queryKey: queryKeys.pipeline,
-                })
-              }
-              disabled={isFetching || transition.isPending}
-            >
-              <RefreshCw
-                className={`mr-2 size-4 ${isFetching ? "animate-spin" : ""}`}
-              />
-              Atualizar
             </Button>
           </div>
         }

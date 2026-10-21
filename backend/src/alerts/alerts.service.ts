@@ -12,6 +12,7 @@ import {
   evaluateFollowUpRisks,
   RiskAlertType,
 } from './follow-up-risk-policy.js';
+import { RealtimeService } from '../realtime/realtime.service.js';
 
 const alertOpportunity = {
   id: true,
@@ -29,6 +30,7 @@ export class AlertsService {
     private readonly prisma: PrismaService,
     config: ConfigService,
     private readonly logger: PinoLogger,
+    private readonly realtime: RealtimeService,
   ) {
     this.staleContactDays = config.get<number>(
       'FOLLOW_UP_STALE_CONTACT_DAYS',
@@ -130,7 +132,7 @@ export class AlertsService {
   }
 
   async resolve(id: string) {
-    const result = await this.prisma.$transaction(async (transaction) => {
+    const outcome = await this.prisma.$transaction(async (transaction) => {
       const rows = await transaction.$queryRaw<Array<{ id: string }>>`
         SELECT "id" FROM "FollowUpAlert" WHERE "id" = ${id}::uuid FOR UPDATE
       `;
@@ -140,7 +142,7 @@ export class AlertsService {
         include: { opportunity: { select: alertOpportunity } },
       });
       if (current.status === 'OPEN') {
-        return transaction.followUpAlert.update({
+        const alert = await transaction.followUpAlert.update({
           where: { id },
           data: {
             status: 'RESOLVED',
@@ -149,10 +151,16 @@ export class AlertsService {
           },
           include: { opportunity: { select: alertOpportunity } },
         });
+        return { alert, changed: true };
       }
-      return current;
+      return { alert: current, changed: false };
     });
-    return serializeAlert(result);
+    if (outcome.changed)
+      this.realtime.publish('alert:resolved', {
+        opportunityId: outcome.alert.opportunityId,
+        alertId: outcome.alert.id,
+      });
+    return serializeAlert(outcome.alert);
   }
 
   async evaluate(evaluatedAt: Date, opportunityIds?: string[]) {
@@ -177,6 +185,16 @@ export class AlertsService {
         created += result.created;
         maintained += result.maintained;
         resolved += result.resolved;
+        for (const alertId of result.createdIds)
+          this.realtime.publish('alert:created', {
+            opportunityId: id,
+            alertId,
+          });
+        for (const alertId of result.resolvedIds)
+          this.realtime.publish('alert:resolved', {
+            opportunityId: id,
+            alertId,
+          });
       } catch (error) {
         if (isUniqueConflict(error)) {
           maintained += 1;
@@ -211,7 +229,14 @@ export class AlertsService {
       const rows = await transaction.$queryRaw<Array<{ id: string }>>`
         SELECT "id" FROM "Opportunity" WHERE "id" = ${id}::uuid FOR UPDATE
       `;
-      if (!rows[0]) return { created: 0, maintained: 0, resolved: 0 };
+      if (!rows[0])
+        return {
+          created: 0,
+          maintained: 0,
+          resolved: 0,
+          createdIds: [] as string[],
+          resolvedIds: [] as string[],
+        };
 
       const opportunity = await transaction.opportunity.findUnique({
         where: { id },
@@ -225,7 +250,14 @@ export class AlertsService {
           customerEventDate: true,
         },
       });
-      if (!opportunity) return { created: 0, maintained: 0, resolved: 0 };
+      if (!opportunity)
+        return {
+          created: 0,
+          maintained: 0,
+          resolved: 0,
+          createdIds: [] as string[],
+          resolvedIds: [] as string[],
+        };
 
       const risks = evaluateFollowUpRisks(opportunity, evaluatedAt, {
         staleContactDays: this.staleContactDays,
@@ -238,6 +270,8 @@ export class AlertsService {
       let created = 0;
       let maintained = 0;
       let resolved = 0;
+      const createdIds: string[] = [];
+      const resolvedIds: string[] = [];
       const retained = new Set<RiskAlertType>();
 
       for (const alert of openAlerts) {
@@ -255,6 +289,7 @@ export class AlertsService {
           data: { status: 'RESOLVED', resolvedAt: evaluatedAt },
         });
         resolved += 1;
+        resolvedIds.push(alert.id);
       }
 
       const acknowledged = await transaction.followUpAlert.findMany({
@@ -284,7 +319,7 @@ export class AlertsService {
           maintained += 1;
           continue;
         }
-        await transaction.followUpAlert.create({
+        const alert = await transaction.followUpAlert.create({
           data: {
             opportunityId: id,
             type: risk.type,
@@ -292,9 +327,10 @@ export class AlertsService {
           },
         });
         created += 1;
+        createdIds.push(alert.id);
       }
 
-      return { created, maintained, resolved };
+      return { created, maintained, resolved, createdIds, resolvedIds };
     });
   }
 }

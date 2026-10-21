@@ -409,6 +409,40 @@ integration test invokes the evaluator with a fixed time.
 
 ## Technical decisions and limits
 
+### Atualizações em tempo real
+
+O gateway Socket.IO recebe conexões no path `/api/socket.io` e transmite apenas
+notificações pequenas após o commit da gravação Prisma. Clientes não têm
+handlers de comandos comerciais; toda leitura e escrita segue nas rotas REST.
+Os payloads contêm `opportunityId`, opcionalmente `version` e `alertId`; não
+incluem dados comerciais completos. Os nomes são `opportunity:created`,
+`opportunity:updated`, `opportunity:deleted`, `opportunity:stage-changed`,
+`activity:created`, `alert:created` e `alert:resolved`.
+
+Criação, edição e transição publicam após suas transações; atividades fazem o
+mesmo após persistirem atividade e eventual atualização de contato. A avaliação
+de alertas coleta os IDs criados e resolvidos dentro de cada transação e emite
+somente depois que ela termina. A resolução manual também publica somente na
+primeira resolução efetiva. Assim, rollback não produz evento.
+
+O Nginx encaminha `/api/socket.io/` ao backend com Upgrade, Connection e timeout
+de 75 segundos, mantendo o mesmo domínio do CRM. Em frontend e backend locais
+sem Nginx, defina `NEXT_PUBLIC_REALTIME_URL=http://localhost:3002` no ambiente
+do Next (o Nest mantém CORS para `http://localhost:3000`). O frontend local com
+Nginx e o Compose completo usam a origem atual sem configuração adicional.
+`CORS_ORIGINS` deve listar a origem exata do navegador: `http://localhost` para
+o Compose publicado na porta padrão e `http://localhost:3000` para Next direto.
+
+O MVP não tem autenticação: qualquer cliente que alcance a origem permitida
+pode receber notificações globais e elas não são isoladas por vendedor. Não
+envie informações sensíveis nesses eventos. A aplicação tolera indisponibilidade
+do socket, reconecta e revalida após reconexão; a revalidação ao retornar à aba
+é limitada a uma chamada por janela de 10 segundos. Uma instância Nest mantém
+os eventos em memória; múltiplas instâncias exigiriam um adapter/distribuidor
+compartilhado. Não há replay garantido.
+
+Tipos do contrato estão em `src/realtime/realtime-events.ts`.
+
 NestJS supplies the module, dependency-injection, lifecycle, and HTTP
 foundations already used by the project. Prisma 7 provides the generated
 type-safe client and official PostgreSQL adapter while keeping database

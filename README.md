@@ -145,6 +145,22 @@ deduplicated, resolvable alerts in PostgreSQL. The risk types, configuration,
 manual acknowledgment behavior, API, case-date scenarios, and test commands are
 documented in [`backend/README.md`](backend/README.md#follow-up-risk-automation).
 
+### Atualizações em tempo real
+
+O Nest publica notificações Socket.IO em `/api/socket.io` após o commit das
+operações REST. O frontend usa uma conexão compartilhada e invalida somente as
+queries TanStack Query afetadas; REST e PostgreSQL continuam sendo a fonte da
+verdade. A integração cobre oportunidades, transições, atividades e alertas do
+scheduler/resolução manual. A reconexão e o retorno à aba revalidam os dados
+relevantes. Sem Nginx, no cenário de frontend e backend locais, configure
+`NEXT_PUBLIC_REALTIME_URL=http://localhost:3002` em `frontend/.env.local`, pois
+Next rewrites de API não encaminham o Engine.IO WebSocket. Veja detalhes nos
+READMEs do [backend](backend/README.md#atualizações-em-tempo-real) e
+[frontend](frontend/README.md#sincronização-em-tempo-real).
+`CORS_ORIGINS` deve incluir exatamente a origem usada no navegador: no Compose
+em `http://localhost`, inclua `http://localhost`; no Next direto em
+`http://localhost:3000`, inclua `http://localhost:3000`.
+
 ## Case selection and AI assistance
 
 The selected case problem is **problem 4: organizing commercial follow-ups**.

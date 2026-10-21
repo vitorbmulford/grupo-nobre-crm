@@ -88,7 +88,29 @@ O frontend estará em `http://localhost`, servido pelo Nginx. O serviço usa bui
 
 Os contratos preservam dinheiro como string decimal, datas de calendário como `YYYY-MM-DD` e timestamps como instantes ISO com offset. A listagem não usa dados de demonstração. O cliente HTTP centraliza URL, query string, JSON, respostas sem corpo, erros padronizados, status, AbortSignal e falhas de rede. A interface mantém o texto útil enviado pelo backend; erros sem mensagem específica recebem uma mensagem de fallback.
 
-TanStack Query usa chaves centralizadas em `src/lib/api/queries.ts`, `staleTime` de 30 segundos, uma nova tentativa para consultas e sem retry automático para mutations. As mutations invalidam as listas, detalhes, histórico e contador de alertas relacionados; a transição de etapa só atualiza o cartão após confirmação da API. Os prefixos de query existentes permitem que uma futura integração de eventos invalide consultas específicas sem criar uma camada paralela de estado. A branch não usa WebSocket, SSE nem polling geral. Os alertas continuam sendo reconciliados pelo scheduler do backend no intervalo configurado, então uma mudança de oportunidade pode levar até esse intervalo para alterar os alertas persistidos.
+TanStack Query usa chaves centralizadas em `src/lib/api/queries.ts`, `staleTime` de 30 segundos, uma nova tentativa para consultas e sem retry automático para mutations. As mutations invalidam as listas, detalhes, histórico e contador de alertas relacionados; a transição de etapa só atualiza o cartão após confirmação da API. A integração em tempo real descrita abaixo invalida queries específicas sem criar uma camada paralela de estado. Os alertas continuam sendo reconciliados pelo scheduler do backend no intervalo configurado, então mudanças comerciais que afetam riscos podem levar até esse intervalo para alterar os alertas persistidos.
+
+## Sincronização em tempo real
+
+`RealtimeSync` abre uma conexão Socket.IO compartilhada pelo provider da
+aplicação no browser; não há socket por página ou componente. O servidor emite
+somente IDs e versão opcional. Eventos de oportunidade invalidam listagens,
+Kanban, detalhe e histórico daquela oportunidade; atividades invalidam o
+histórico de atividades e detalhe; alertas invalidam listas, contador e alertas
+da oportunidade. Isso preserva filtros, navegação, paginação e dados exibidos
+durante falhas, sem duplicar estado remoto.
+
+Após reconectar, queries relevantes são revalidadas. Ao voltar para uma aba
+visível, uma revalidação com limite de frequência cobre eventos perdidos. Uma
+falha de WebSocket não bloqueia o REST. No cenário local sem Nginx, configure
+`NEXT_PUBLIC_REALTIME_URL=http://localhost:3002` em `.env.local`; com Compose ou
+frontend local atrás do Nginx, a origem da aplicação é usada automaticamente.
+O Next rewrite atende o REST durante desenvolvimento, mas não faz proxy do
+Socket.IO; nesse cenário direto, a URL explícita conecta ao Nest.
+
+O canal é global e sem autenticação neste MVP, não fornece isolamento por
+vendedor e não garante replay. O backend é a fonte da verdade. Ver contrato,
+CORS e limites no [README do backend](../backend/README.md#atualizações-em-tempo-real).
 
 ## Automação escolhida no case
 

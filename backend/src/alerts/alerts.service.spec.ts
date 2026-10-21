@@ -14,7 +14,9 @@ describe('AlertsService', () => {
       get: (_key: string, fallback: number) => fallback,
     } as unknown as ConfigService;
     const logger = { info: vi.fn(), error: vi.fn() } as unknown as PinoLogger;
-    const service = new AlertsService(prisma, config, logger);
+    const service = new AlertsService(prisma, config, logger, {
+      publish: vi.fn(),
+    } as never);
 
     await service.list({ page: 1, limit: 20, search: 'agencia' }, true);
 
@@ -34,7 +36,9 @@ describe('AlertsService', () => {
       get: (_key: string, fallback: number) => fallback,
     } as unknown as ConfigService;
     const logger = { info: vi.fn(), error: vi.fn() } as unknown as PinoLogger;
-    const service = new AlertsService(prisma, config, logger);
+    const service = new AlertsService(prisma, config, logger, {
+      publish: vi.fn(),
+    } as never);
 
     await service.list(
       {
@@ -111,7 +115,9 @@ describe('AlertsService', () => {
       info: vi.fn(),
       error: errorLog,
     } as unknown as PinoLogger;
-    const service = new AlertsService(prisma, config, logger);
+    const service = new AlertsService(prisma, config, logger, {
+      publish: vi.fn(),
+    } as never);
 
     await expect(
       service.evaluate(new Date('2026-10-15T12:00:00.000Z')),

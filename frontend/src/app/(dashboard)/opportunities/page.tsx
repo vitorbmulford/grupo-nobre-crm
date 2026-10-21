@@ -11,7 +11,6 @@ import {
   Check,
   Pencil,
   Plus,
-  RefreshCw,
   Search,
   Trash2,
   X,
@@ -208,19 +207,6 @@ export default function OpportunitiesPage() {
               <p className="text-muted-foreground mt-0.5 text-xs">
                 Busca, filtros e ordenação aplicados pela API comercial
               </p>
-            </div>
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => void query.refetch()}
-                disabled={query.isFetching}
-              >
-                <RefreshCw
-                  className={`mr-2 size-4 ${query.isFetching ? "animate-spin" : ""}`}
-                />
-                Atualizar
-              </Button>
             </div>
           </div>
           <div className="space-y-3">

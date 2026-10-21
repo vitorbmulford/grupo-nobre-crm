@@ -7,10 +7,14 @@ import { Prisma } from '../generated/prisma/client.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { CreateActivityDto } from './dto/create-activity.dto.js';
 import { ListActivitiesQueryDto } from './dto/list-activities-query.dto.js';
+import { RealtimeService } from '../realtime/realtime.service.js';
 
 @Injectable()
 export class ActivitiesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly realtime: RealtimeService,
+  ) {}
 
   async create(opportunityId: string, dto: CreateActivityDto) {
     const occurredAt = new Date(dto.occurredAt);
@@ -29,7 +33,7 @@ export class ActivitiesService {
       );
     }
 
-    return this.prisma.$transaction(async (transaction) => {
+    const activity = await this.prisma.$transaction(async (transaction) => {
       const rows = await transaction.$queryRaw<
         Array<{ id: string; deletedAt: Date | null }>
       >`
@@ -62,6 +66,8 @@ export class ActivitiesService {
       });
       return serializeActivity(activity);
     });
+    this.realtime.publish('activity:created', { opportunityId });
+    return activity;
   }
 
   async list(opportunityId: string, query: ListActivitiesQueryDto) {

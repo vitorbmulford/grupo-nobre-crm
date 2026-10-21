@@ -14,6 +14,7 @@ import { SalespeopleModule } from './salespeople/salespeople.module.js';
 import { ActivitiesModule } from './activities/activities.module.js';
 import { ScheduleModule } from '@nestjs/schedule';
 import { AlertsModule } from './alerts/alerts.module.js';
+import { RealtimeModule } from './realtime/realtime.module.js';
 
 @Module({
   imports: [
@@ -135,6 +136,7 @@ import { AlertsModule } from './alerts/alerts.module.js';
     SalespeopleModule,
     ActivitiesModule,
     AlertsModule,
+    RealtimeModule,
   ],
   controllers: [AppController],
   providers: [

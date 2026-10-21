@@ -5,6 +5,7 @@ import { ThemeProvider } from "next-themes";
 import { useState } from "react";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { RealtimeSync } from "@/providers/realtime-sync";
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(
@@ -26,6 +27,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
       storageKey="grupo-nobre-theme"
     >
       <QueryClientProvider client={queryClient}>
+        <RealtimeSync />
         <TooltipProvider delay={300}>{children}</TooltipProvider>
         <Toaster position="top-right" richColors />
       </QueryClientProvider>
