@@ -35,6 +35,7 @@ export const queryKeys = {
   opportunityHistory: (id: string) => ["opportunities", "history", id] as const,
   opportunityActivities: (id: string) =>
     ["opportunities", "activities", id] as const,
+  opportunityAlerts: (id: string) => ["alerts", "opportunity", id] as const,
   salespeople: ["salespeople"] as const,
   alerts: ["alerts"] as const,
   alertList: (filters: AlertListFilters) =>
@@ -116,6 +117,22 @@ export const opportunityActivitiesQuery = (id: string) =>
       api.get<PageResponse<Activity>>(
         `/opportunities/${id}/activities`,
         { page: pageParam, limit: 100 },
+        signal,
+      ),
+    getNextPageParam: (lastPage) =>
+      lastPage.meta.page < lastPage.meta.totalPages
+        ? lastPage.meta.page + 1
+        : undefined,
+  });
+
+export const opportunityAlertsQuery = (id: string) =>
+  infiniteQueryOptions({
+    queryKey: queryKeys.opportunityAlerts(id),
+    initialPageParam: 1,
+    queryFn: ({ signal, pageParam }) =>
+      api.get<PageResponse<FollowUpAlert>>(
+        `/opportunities/${id}/alerts`,
+        { page: pageParam, limit: 20 },
         signal,
       ),
     getNextPageParam: (lastPage) =>

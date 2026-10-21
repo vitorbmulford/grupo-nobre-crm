@@ -57,8 +57,11 @@ import {
   queryKeys,
   salespeopleQuery,
 } from "@/lib/api/queries";
-import { deleteOpportunity } from "@/lib/api/opportunity-mutations";
-import { updateOpportunity } from "@/lib/api/opportunity-mutations";
+import {
+  deleteOpportunity,
+  invalidateAfterOpportunityMutation,
+  updateOpportunity,
+} from "@/lib/api/opportunity-mutations";
 import { STAGES } from "@/lib/constants/stages";
 import { withReturnTo } from "@/lib/navigation";
 import {
@@ -238,6 +241,7 @@ export default function OpportunitiesPage() {
                     />
                     <Input
                       id="opportunity-search"
+                      maxLength={120}
                       placeholder="Ex.: Padaria do Bairro ou OPP-2007"
                       className="pl-9"
                       value={search}
@@ -494,9 +498,7 @@ function OpportunityRow({ opportunity }: { opportunity: Opportunity }) {
   const deletion = useMutation({
     mutationFn: () => deleteOpportunity(opportunity.id),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({
-        queryKey: queryKeys.opportunities,
-      });
+      await invalidateAfterOpportunityMutation(queryClient);
       toast.success(`${opportunity.code} excluída.`);
     },
     onError: (error) =>
@@ -610,9 +612,7 @@ function OpportunityCard({ opportunity }: { opportunity: Opportunity }) {
   const deletion = useMutation({
     mutationFn: () => deleteOpportunity(opportunity.id),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({
-        queryKey: queryKeys.opportunities,
-      });
+      await invalidateAfterOpportunityMutation(queryClient);
       toast.success(`${opportunity.code} excluída.`);
     },
     onError: (error) =>
@@ -734,7 +734,7 @@ function FollowUpScheduleEditor({
     },
     onSuccess: async (saved) => {
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.opportunities }),
+        invalidateAfterOpportunityMutation(queryClient),
         queryClient.setQueryData(queryKeys.opportunity(saved.id), saved),
       ]);
       setIsEditing(false);

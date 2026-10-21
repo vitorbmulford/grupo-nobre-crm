@@ -144,3 +144,21 @@ The backend evaluates follow-up risks at startup and every 15 minutes and stores
 deduplicated, resolvable alerts in PostgreSQL. The risk types, configuration,
 manual acknowledgment behavior, API, case-date scenarios, and test commands are
 documented in [`backend/README.md`](backend/README.md#follow-up-risk-automation).
+
+## Case selection and AI assistance
+
+The selected case problem is **problem 4: organizing commercial follow-ups**.
+The implemented automation evaluates follow-up risks in the backend and
+persists alerts for the CRM interface. Solutions for problems 1, 2, and 3 are
+proposals only; they are documented separately from implemented behavior in
+[`backend/README.md`](backend/README.md#follow-up-risk-automation).
+
+AI assistance was used to inspect the frontend, compare its API usage with the
+backend contracts, identify documentation and input-validation inconsistencies,
+and draft documentation. The search-length fix was checked against the
+backend's 120-character query constraint. Automated checks are listed in the
+frontend README and task report. A read-only browser smoke check covered the
+opportunity list, pipeline, alerts, and opportunity details at a 986-pixel
+viewport in the system dark theme; mobile-sized viewports and other theme
+variants were not checked visually. The full Docker application was not run
+from scratch; the existing stack was used for read-only smoke checks.

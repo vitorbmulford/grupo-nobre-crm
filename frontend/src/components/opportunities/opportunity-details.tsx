@@ -21,7 +21,10 @@ import { ErrorState, LoadingState } from "@/components/shared/request-states";
 import { BackLink } from "@/components/shared/back-link";
 import { StageBadge } from "@/components/shared/stage-badge";
 import { opportunityQuery, queryKeys } from "@/lib/api/queries";
-import { deleteOpportunity } from "@/lib/api/opportunity-mutations";
+import {
+  deleteOpportunity,
+  invalidateAfterOpportunityMutation,
+} from "@/lib/api/opportunity-mutations";
 import {
   getInternalReturnTo,
   getOpportunityBackLabel,
@@ -34,6 +37,7 @@ import {
   formatNextFollowUp,
 } from "@/lib/format";
 import { OpportunityCommercialHistory } from "@/components/opportunities/opportunity-commercial-history";
+import { OpportunityAlerts } from "@/components/opportunities/opportunity-alerts";
 
 export function OpportunityDetails({
   id,
@@ -55,9 +59,7 @@ export function OpportunityDetails({
   const deletion = useMutation({
     mutationFn: () => deleteOpportunity(id),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({
-        queryKey: queryKeys.opportunities,
-      });
+      await invalidateAfterOpportunityMutation(queryClient);
       await queryClient.removeQueries({ queryKey: queryKeys.opportunity(id) });
       toast.success("Oportunidade excluída.");
       router.push("/opportunities");
@@ -329,6 +331,7 @@ export function OpportunityDetails({
           </>
         }
       />
+      <OpportunityAlerts opportunityId={opportunity.id} />
       <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
         <AlertDialogContent>
           <AlertDialogHeader>

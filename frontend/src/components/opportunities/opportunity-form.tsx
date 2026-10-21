@@ -35,6 +35,7 @@ import {
 } from "@/lib/api/queries";
 import {
   createOpportunity,
+  invalidateAfterOpportunityMutation,
   updateOpportunity,
 } from "@/lib/api/opportunity-mutations";
 import { getInternalReturnTo, getOpportunityBackLabel } from "@/lib/navigation";
@@ -130,9 +131,7 @@ export function OpportunityForm({
       );
     },
     onSuccess: async (saved) => {
-      await queryClient.invalidateQueries({
-        queryKey: queryKeys.opportunities,
-      });
+      await invalidateAfterOpportunityMutation(queryClient);
       await queryClient.setQueryData(queryKeys.opportunity(saved.id), saved);
       toast.success(
         opportunityId ? "Oportunidade atualizada." : "Oportunidade criada.",
