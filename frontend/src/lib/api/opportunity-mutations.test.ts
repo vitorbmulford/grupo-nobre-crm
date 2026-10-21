@@ -12,6 +12,12 @@ afterEach(() => vi.unstubAllGlobals());
 
 const payload: OpportunityPayload = {
   companyName: "Empresa Exemplo",
+  contactName: null,
+  contactPhone: null,
+  contactEmail: null,
+  companyWebsite: null,
+  companyLocation: null,
+  companyDescription: null,
   estimatedValue: "1250.00",
   lastContactAt: null,
   proposalValidUntil: null,
@@ -85,17 +91,15 @@ describe("opportunity mutations", () => {
   });
 
   it("sends a trimmed justification and preserves conflict responses", async () => {
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValue(
-        new Response(
-          JSON.stringify({
-            statusCode: 409,
-            message: "Opportunity version is stale",
-          }),
-          { status: 409, headers: { "content-type": "application/json" } },
-        ),
-      );
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          statusCode: 409,
+          message: "Opportunity version is stale",
+        }),
+        { status: 409, headers: { "content-type": "application/json" } },
+      ),
+    );
     vi.stubGlobal("fetch", fetchMock);
 
     await expect(

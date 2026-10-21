@@ -92,9 +92,126 @@ describe('Opportunities API (PostgreSQL integration)', () => {
     expect(first.body.code).toMatch(/^OPP-\d{4,}$/);
     expect(second.body.code).not.toBe(first.body.code);
     expect(first.body.estimatedValue).toBe('1200.50');
+    expect(first.body).toMatchObject({
+      contactName: null,
+      contactPhone: null,
+      contactEmail: null,
+      companyWebsite: null,
+      companyLocation: null,
+      companyDescription: null,
+    });
     expect(first.body.items).toEqual([
       expect.objectContaining({ name: 'Caderno personalizado', quantity: 10 }),
     ]);
+  });
+
+  it('accepts estimated values with twelve integer digits', async () => {
+    const response = await createOpportunity('Valor máximo válido', {
+      estimatedValue: '5000000000.00',
+    });
+    expect(response.body.estimatedValue).toBe('5000000000.00');
+  });
+
+  it('creates, reads, updates, and clears optional client information', async () => {
+    const created = await createOpportunity('Perfil do cliente', {
+      contactName: ' Mariana Souza ',
+      contactPhone: ' 11999990000 ',
+      contactEmail: 'mariana@empresa.com.br',
+      companyWebsite: 'www.empresa.com.br',
+      companyLocation: ' São Paulo, SP ',
+      companyDescription: ' Distribuidora de materiais para escritório. ',
+    });
+    expect(created.body).toMatchObject({
+      contactName: 'Mariana Souza',
+      contactPhone: '(11) 99999-0000',
+      contactEmail: 'mariana@empresa.com.br',
+      companyWebsite: 'www.empresa.com.br',
+      companyLocation: 'São Paulo, SP',
+      companyDescription: 'Distribuidora de materiais para escritório.',
+    });
+
+    const detail = await request(app.getHttpServer())
+      .get(`/api/opportunities/${created.body.id}`)
+      .expect(200);
+    expect(detail.body.contactEmail).toBe('mariana@empresa.com.br');
+    const list = await request(app.getHttpServer())
+      .get('/api/opportunities')
+      .query({ search: created.body.code })
+      .expect(200);
+    expect(list.body.data[0].companyDescription).toBe(
+      'Distribuidora de materiais para escritório.',
+    );
+
+    const updated = await request(app.getHttpServer())
+      .patch(`/api/opportunities/${created.body.id}`)
+      .send({
+        version: created.body.version,
+        companyName: created.body.companyName,
+        contactName: '',
+        contactPhone: null,
+        contactEmail: 'novo@empresa.com.br',
+        companyWebsite: '',
+        companyLocation: '',
+        companyDescription: 'Novo contexto.',
+      })
+      .expect(200);
+    expect(updated.body).toMatchObject({
+      contactName: null,
+      contactPhone: null,
+      contactEmail: 'novo@empresa.com.br',
+      companyWebsite: null,
+      companyLocation: null,
+      companyDescription: 'Novo contexto.',
+    });
+
+    await request(app.getHttpServer())
+      .post('/api/opportunities')
+      .send(
+        createBody('Perfil com e-mail inválido', { contactEmail: 'inválido' }),
+      )
+      .expect(400);
+    await request(app.getHttpServer())
+      .post('/api/opportunities')
+      .send(
+        createBody('Perfil com contato inválido', {
+          contactName: 'Contato 123',
+        }),
+      )
+      .expect(400);
+    await request(app.getHttpServer())
+      .post('/api/opportunities')
+      .send(
+        createBody('Perfil com telefone inválido', { contactPhone: "'123" }),
+      )
+      .expect(400);
+    await request(app.getHttpServer())
+      .post('/api/opportunities')
+      .send(
+        createBody('Perfil com site inválido', {
+          companyWebsite: '12e21e21e21e',
+        }),
+      )
+      .expect(400);
+    await request(app.getHttpServer())
+      .post('/api/opportunities')
+      .send(
+        createBody('Perfil com descrição longa', {
+          companyDescription: 'x'.repeat(2001),
+        }),
+      )
+      .expect(400);
+    await request(app.getHttpServer())
+      .post('/api/opportunities')
+      .send(
+        createBody('Perfil com cidade inválida', {
+          companyLocation: 'São Paulo 123, SP',
+        }),
+      )
+      .expect(400);
+
+    await request(app.getHttpServer())
+      .delete(`/api/opportunities/${created.body.id}`)
+      .expect(204);
   });
 
   it('rejects invalid fields, direct stage changes, and missing salesperson references', async () => {

@@ -155,6 +155,91 @@ export function OpportunityDetails({
           </SummaryItem>
         </dl>
       </section>
+      <section
+        className="bg-card mt-6 rounded-xl border p-4 sm:p-6"
+        aria-labelledby="client-information-title"
+      >
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 id="client-information-title" className="font-semibold">
+              Informações do cliente
+            </h2>
+            <p className="text-muted-foreground mt-1 text-sm">
+              Dados de contato e contexto da empresa.
+            </p>
+          </div>
+          <Button
+            size="sm"
+            variant="ghost"
+            nativeButton={false}
+            render={<Link href={editHref} />}
+          >
+            <Pencil className="mr-2 size-4" />
+            Editar informações
+          </Button>
+        </div>
+        {hasClientInformation(opportunity) ? (
+          <dl className="mt-4 grid gap-x-6 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
+            {opportunity.contactName && (
+              <Detail label="Pessoa de contato" stacked>
+                {opportunity.contactName}
+              </Detail>
+            )}
+            {opportunity.contactPhone && (
+              <Detail label="Telefone / WhatsApp" stacked>
+                <a
+                  className="text-primary underline-offset-4 hover:underline"
+                  href={`tel:${opportunity.contactPhone.replace(/[^\d+]/g, "")}`}
+                >
+                  {opportunity.contactPhone}
+                </a>
+              </Detail>
+            )}
+            {opportunity.contactEmail && (
+              <Detail label="E-mail" stacked>
+                <a
+                  className="text-primary break-all underline-offset-4 hover:underline"
+                  href={`mailto:${opportunity.contactEmail}`}
+                >
+                  {opportunity.contactEmail}
+                </a>
+              </Detail>
+            )}
+            {opportunity.companyLocation && (
+              <Detail label="Cidade / Estado" stacked>
+                {opportunity.companyLocation}
+              </Detail>
+            )}
+            {opportunity.companyWebsite && (
+              <Detail label="Website" stacked>
+                <a
+                  className="text-primary break-all underline-offset-4 hover:underline"
+                  href={websiteHref(opportunity.companyWebsite)}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  {opportunity.companyWebsite}
+                </a>
+              </Detail>
+            )}
+            {opportunity.companyDescription && (
+              <Detail
+                label="Sobre a empresa"
+                className="sm:col-span-2 lg:col-span-3"
+                stacked
+              >
+                <span className="whitespace-pre-wrap">
+                  {opportunity.companyDescription}
+                </span>
+              </Detail>
+            )}
+          </dl>
+        ) : (
+          <p className="text-muted-foreground mt-4 rounded-lg border border-dashed p-4 text-sm">
+            Nenhuma informação adicional do cliente foi cadastrada.
+          </p>
+        )}
+      </section>
       <OpportunityCommercialHistory
         opportunityId={opportunity.id}
         aside={
@@ -306,13 +391,23 @@ function Detail({
   label,
   children,
   highlight = false,
+  className,
+  stacked = false,
 }: {
   label: string;
   children: React.ReactNode;
   highlight?: boolean;
+  className?: string;
+  stacked?: boolean;
 }) {
   return (
-    <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
+    <div
+      className={`${
+        stacked
+          ? "flex min-w-0 flex-col gap-1"
+          : "flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between sm:gap-6"
+      } ${className ?? ""}`}
+    >
       <dt className="text-muted-foreground text-sm">{label}</dt>
       <dd
         className={`text-sm font-medium tabular-nums ${
@@ -323,4 +418,31 @@ function Detail({
       </dd>
     </div>
   );
+}
+
+function hasClientInformation(opportunity: {
+  contactName: string | null;
+  contactPhone: string | null;
+  contactEmail: string | null;
+  companyWebsite: string | null;
+  companyLocation: string | null;
+  companyDescription: string | null;
+}): boolean {
+  return Object.values(opportunity).some(
+    (value) => typeof value === "string" && value.trim().length > 0,
+  );
+}
+
+function websiteHref(value: string): string {
+  const href = /^[a-z][a-z\d+.-]*:\/\//i.test(value)
+    ? value
+    : `https://${value}`;
+  try {
+    const parsed = new URL(href);
+    return parsed.protocol === "http:" || parsed.protocol === "https:"
+      ? parsed.href
+      : "#";
+  } catch {
+    return "#";
+  }
 }

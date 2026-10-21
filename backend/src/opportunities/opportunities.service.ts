@@ -100,6 +100,12 @@ export class OpportunitiesService {
           data: {
             code,
             companyName: dto.companyName.trim(),
+            contactName: optionalText(dto.contactName),
+            contactPhone: optionalPhone(dto.contactPhone),
+            contactEmail: optionalText(dto.contactEmail),
+            companyWebsite: optionalText(dto.companyWebsite),
+            companyLocation: optionalText(dto.companyLocation),
+            companyDescription: optionalText(dto.companyDescription),
             stage: 'PRIMEIRO_CONTATO',
             estimatedValue: decimal(dto.estimatedValue),
             lastContactAt: dateOnly(dto.lastContactAt),
@@ -160,6 +166,24 @@ export class OpportunitiesService {
           version: { increment: 1 },
           ...(fields.companyName !== undefined
             ? { companyName: fields.companyName.trim() }
+            : {}),
+          ...(fields.contactName !== undefined
+            ? { contactName: optionalText(fields.contactName) }
+            : {}),
+          ...(fields.contactPhone !== undefined
+            ? { contactPhone: optionalPhone(fields.contactPhone) }
+            : {}),
+          ...(fields.contactEmail !== undefined
+            ? { contactEmail: optionalText(fields.contactEmail) }
+            : {}),
+          ...(fields.companyWebsite !== undefined
+            ? { companyWebsite: optionalText(fields.companyWebsite) }
+            : {}),
+          ...(fields.companyLocation !== undefined
+            ? { companyLocation: optionalText(fields.companyLocation) }
+            : {}),
+          ...(fields.companyDescription !== undefined
+            ? { companyDescription: optionalText(fields.companyDescription) }
             : {}),
           ...(fields.estimatedValue !== undefined
             ? { estimatedValue: decimal(fields.estimatedValue) }
@@ -358,6 +382,12 @@ function serializeOpportunity(opportunity: OpportunityWithRelations) {
     id: opportunity.id,
     code: opportunity.code,
     companyName: opportunity.companyName,
+    contactName: opportunity.contactName,
+    contactPhone: opportunity.contactPhone,
+    contactEmail: opportunity.contactEmail,
+    companyWebsite: opportunity.companyWebsite,
+    companyLocation: opportunity.companyLocation,
+    companyDescription: opportunity.companyDescription,
     stage: opportunity.stage,
     estimatedValue: opportunity.estimatedValue?.toFixed(2) ?? null,
     lastContactAt: serializeDateOnly(opportunity.lastContactAt),
@@ -379,6 +409,26 @@ function serializeOpportunity(opportunity: OpportunityWithRelations) {
       createdAt: item.createdAt.toISOString(),
     })),
   };
+}
+
+function optionalText(value: string | null | undefined): string | null {
+  return value?.trim() || null;
+}
+
+function optionalPhone(value: string | null | undefined): string | null {
+  const trimmed = value?.trim();
+  if (!trimmed) return null;
+  const digits = trimmed.replace(/\D/g, '');
+  const hasCountryCode =
+    trimmed.startsWith('+55') ||
+    (digits.length > 11 && digits.startsWith('55'));
+  const national = hasCountryCode ? digits.slice(2) : digits;
+  const areaCode = national.slice(0, 2);
+  const number = national.slice(2);
+  if (areaCode.length !== 2 || ![8, 9].includes(number.length)) return trimmed;
+  const subscriberLength = number.length === 9 ? 5 : 4;
+  const formatted = `(${areaCode}) ${number.slice(0, subscriberLength)}-${number.slice(subscriberLength)}`;
+  return hasCountryCode ? `+55 ${formatted}` : formatted;
 }
 
 function serializeDateOnly(value: Date | null): string | null {

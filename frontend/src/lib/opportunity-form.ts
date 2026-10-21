@@ -32,7 +32,43 @@ const optionalDateTime = z
 const MAX_ITEM_QUANTITY = 2_147_483_647;
 const ESTIMATED_VALUE_PATTERN =
   /^(?:\d{1,12}|\d{1,3}(?:\.\d{3}){1,3})(?:,\d{1,2})?$/;
+export const ESTIMATED_VALUE_INPUT_PATTERN = String.raw`(?:\d{1,12}|\d{1,3}(?:\.\d{3}){1,3})(?:,\d{1,2})?`;
 const itemSchema = z.object({ name: z.string(), quantity: z.string() });
+const optionalText = (maxLength: number) =>
+  z.string().max(maxLength, `Use até ${maxLength} caracteres.`);
+const contactNamePattern = /^[\p{L}\p{M}][\p{L}\p{M} .,'’()/-]*$/u;
+const contactPhonePattern = /^(?:\+?55\s*)?\(?\d{2}\)?\s*\d{4,5}-?\d{4}$/;
+const companyWebsitePattern =
+  /^(?:https?:\/\/)?(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}(?::\d{1,5})?(?:[/?#][^\s]*)?$/i;
+const optionalContactName = optionalText(160).refine(
+  (value) => !value.trim() || contactNamePattern.test(value.trim()),
+  "Use apenas letras e pontuação comum para nomes.",
+);
+const optionalContactPhone = optionalText(30).refine(
+  (value) => !value.trim() || contactPhonePattern.test(value.trim()),
+  "Informe um telefone com DDD e número válido.",
+);
+const optionalEmail = optionalText(254).refine(
+  (value) => !value.trim() || z.email().safeParse(value.trim()).success,
+  "Informe um e-mail válido.",
+);
+const optionalWebsite = optionalText(2048).refine((value) => {
+  const trimmed = value.trim();
+  if (!trimmed) return true;
+  if (!companyWebsitePattern.test(trimmed)) return false;
+  try {
+    const parsed = new URL(
+      /^[a-z][a-z\d+.-]*:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`,
+    );
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
+}, "Informe um site válido.");
+const optionalLocation = optionalText(240).refine(
+  (value) => !value.trim() || /^[\p{L}\p{M}\s,.'’()/-]+$/u.test(value),
+  "Use apenas letras e pontuação comum para cidade e estado.",
+);
 
 export const opportunityFormSchema = z
   .object({
@@ -41,6 +77,12 @@ export const opportunityFormSchema = z
       .trim()
       .min(1, "Informe o nome da empresa.")
       .max(240, "Use até 240 caracteres."),
+    contactName: optionalContactName,
+    contactPhone: optionalContactPhone,
+    contactEmail: optionalEmail,
+    companyWebsite: optionalWebsite,
+    companyLocation: optionalLocation,
+    companyDescription: optionalText(2000),
     estimatedValue: z.string().refine((value) => {
       if (!value.trim()) return true;
       return ESTIMATED_VALUE_PATTERN.test(value.trim());
@@ -136,10 +178,50 @@ export function sanitizeQuantityInput(value: string): string {
   return value.replace(/\D/g, "").slice(0, 10);
 }
 
+export function sanitizeContactNameInput(value: string): string {
+  return value
+    .replace(/[^\p{L}\p{M} .,'’()/-]/gu, "")
+    .replace(/\s{2,}/g, " ")
+    .slice(0, 160);
+}
+
+export function sanitizeLocationInput(value: string): string {
+  return value
+    .replace(/[^\p{L}\p{M}\s,.'’()/-]/gu, "")
+    .replace(/\s{2,}/g, " ")
+    .replace(/\s+([,.'’])/g, "$1")
+    .slice(0, 240);
+}
+
+export function formatContactPhoneInput(value: string): string {
+  const digits = value.replace(/\D/g, "");
+  const hasCountryCode =
+    /^\s*\+55/.test(value) || (digits.length > 11 && digits.startsWith("55"));
+  const national = (hasCountryCode ? digits.slice(2) : digits).slice(0, 11);
+  const areaCode = national.slice(0, 2);
+  const subscriber = national.slice(2);
+  const countryPrefix = hasCountryCode ? "+55 " : "";
+
+  if (!areaCode) return countryPrefix;
+  if (areaCode.length < 2) return `${countryPrefix}(${areaCode}`;
+  if (!subscriber) return `${countryPrefix}(${areaCode})`;
+  if (subscriber.length <= 4)
+    return `${countryPrefix}(${areaCode}) ${subscriber}`;
+
+  const subscriberLength = subscriber.length >= 9 ? 5 : 4;
+  return `${countryPrefix}(${areaCode}) ${subscriber.slice(0, subscriberLength)}-${subscriber.slice(subscriberLength)}`;
+}
+
 export type OpportunityFormValues = z.infer<typeof opportunityFormSchema>;
 
 export type OpportunityPayload = {
   companyName: string;
+  contactName: string | null;
+  contactPhone: string | null;
+  contactEmail: string | null;
+  companyWebsite: string | null;
+  companyLocation: string | null;
+  companyDescription: string | null;
   estimatedValue: string | null;
   lastContactAt: string | null;
   proposalValidUntil: string | null;
@@ -159,6 +241,12 @@ export function toOpportunityPayload(
     .replace(",", ".");
   return {
     companyName: values.companyName.trim(),
+    contactName: values.contactName.trim() || null,
+    contactPhone: values.contactPhone.trim() || null,
+    contactEmail: values.contactEmail.trim() || null,
+    companyWebsite: values.companyWebsite.trim() || null,
+    companyLocation: values.companyLocation.trim() || null,
+    companyDescription: values.companyDescription.trim() || null,
     estimatedValue: value || null,
     lastContactAt: values.lastContactAt || null,
     proposalValidUntil: values.proposalValidUntil || null,
@@ -190,6 +278,12 @@ export function opportunityToFormValues(
 ): OpportunityFormValues {
   return {
     companyName: opportunity?.companyName ?? "",
+    contactName: opportunity?.contactName ?? "",
+    contactPhone: opportunity?.contactPhone ?? "",
+    contactEmail: opportunity?.contactEmail ?? "",
+    companyWebsite: opportunity?.companyWebsite ?? "",
+    companyLocation: opportunity?.companyLocation ?? "",
+    companyDescription: opportunity?.companyDescription ?? "",
     estimatedValue: formatApiEstimatedValue(
       opportunity?.estimatedValue ?? null,
     ),
