@@ -4,6 +4,70 @@ import { PrismaService } from '../prisma/prisma.service.js';
 import { AlertsService } from './alerts.service.js';
 
 describe('AlertsService', () => {
+  it('matches accented customer names when the search omits the accent', async () => {
+    const count = vi.fn().mockResolvedValueOnce(0).mockResolvedValueOnce(1);
+    const findMany = vi.fn().mockResolvedValue([]);
+    const prisma = {
+      followUpAlert: { count, findMany },
+    } as unknown as PrismaService;
+    const config = {
+      get: (_key: string, fallback: number) => fallback,
+    } as unknown as ConfigService;
+    const logger = { info: vi.fn(), error: vi.fn() } as unknown as PinoLogger;
+    const service = new AlertsService(prisma, config, logger);
+
+    await service.list({ page: 1, limit: 20, search: 'agencia' }, true);
+
+    const where = count.mock.calls[1][0].where;
+    expect(where.opportunity.is.OR).toContainEqual({
+      companyName: { contains: 'agência', mode: 'insensitive' },
+    });
+  });
+
+  it('filters alert pages by customer/code search and opportunity salesperson', async () => {
+    const count = vi.fn().mockResolvedValue(1);
+    const findMany = vi.fn().mockResolvedValue([]);
+    const prisma = {
+      followUpAlert: { count, findMany },
+    } as unknown as PrismaService;
+    const config = {
+      get: (_key: string, fallback: number) => fallback,
+    } as unknown as ConfigService;
+    const logger = { info: vi.fn(), error: vi.fn() } as unknown as PinoLogger;
+    const service = new AlertsService(prisma, config, logger);
+
+    await service.list(
+      {
+        page: 2,
+        limit: 10,
+        search: '  Nobre  ',
+        salespersonId: 'salesperson-1',
+      },
+      true,
+    );
+
+    const expectedFilter = {
+      status: 'OPEN',
+      opportunity: {
+        is: {
+          salespersonId: 'salesperson-1',
+          OR: [
+            { code: { contains: 'Nobre', mode: 'insensitive' } },
+            { companyName: { contains: 'Nobre', mode: 'insensitive' } },
+          ],
+        },
+      },
+    };
+    expect(count).toHaveBeenCalledWith({ where: expectedFilter });
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expectedFilter,
+        skip: 10,
+        take: 10,
+      }),
+    );
+  });
+
   it('continues reconciling other opportunities after one opportunity fails', async () => {
     const transaction = {
       $queryRaw: vi.fn().mockResolvedValue([{ id: 'opportunity-2' }]),

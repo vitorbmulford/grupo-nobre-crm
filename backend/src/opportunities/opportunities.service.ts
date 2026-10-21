@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '../generated/prisma/client.js';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { searchTerms } from '../common/search-terms.js';
 import { CreateOpportunityDto } from './dto/create-opportunity.dto.js';
 import { ListOpportunitiesQueryDto } from './dto/list-opportunities-query.dto.js';
 import { TransitionStageDto } from './dto/transition-stage.dto.js';
@@ -28,33 +29,43 @@ export class OpportunitiesService {
   async list(query: ListOpportunitiesQueryDto) {
     const page = query.page ?? 1;
     const limit = query.limit ?? 20;
-    const where: Prisma.OpportunityWhereInput = {
+    const search = query.search?.trim();
+    const makeWhere = (terms?: string[]): Prisma.OpportunityWhereInput => ({
       deletedAt: null,
       ...(query.stage ? { stage: query.stage } : {}),
       ...(query.salespersonId ? { salespersonId: query.salespersonId } : {}),
-      ...(query.search
+      ...(terms
         ? {
-            OR: [
-              { code: { contains: query.search, mode: 'insensitive' } },
-              { companyName: { contains: query.search, mode: 'insensitive' } },
-            ],
+            OR: terms.flatMap((term) => [
+              { code: { contains: term, mode: 'insensitive' as const } },
+              { companyName: { contains: term, mode: 'insensitive' as const } },
+            ]),
           }
         : {}),
-    };
+    });
     const orderBy = {
       [query.sortBy ?? 'createdAt']: query.sortOrder ?? 'desc',
     } as Prisma.OpportunityOrderByWithRelationInput;
 
-    const [total, data] = await Promise.all([
-      this.prisma.opportunity.count({ where }),
-      this.prisma.opportunity.findMany({
-        where,
-        include: opportunityRelations,
-        orderBy: [orderBy, { id: 'asc' }],
-        skip: (page - 1) * limit,
-        take: limit,
-      }),
-    ]);
+    const loadPage = async (terms?: string[]) => {
+      const where = makeWhere(terms);
+      const [total, data] = await Promise.all([
+        this.prisma.opportunity.count({ where }),
+        this.prisma.opportunity.findMany({
+          where,
+          include: opportunityRelations,
+          orderBy: [orderBy, { id: 'asc' }],
+          skip: (page - 1) * limit,
+          take: limit,
+        }),
+      ]);
+      return { total, data };
+    };
+    let { total, data } = await loadPage(search ? [search] : undefined);
+    if (total === 0 && search) {
+      const alternatives = searchTerms(search).slice(1);
+      if (alternatives.length) ({ total, data } = await loadPage(alternatives));
+    }
 
     return {
       data: data.map(serializeOpportunity),

@@ -1,5 +1,14 @@
 import { Type } from 'class-transformer';
-import { IsEnum, IsInt, IsOptional, IsUUID, Max, Min } from 'class-validator';
+import {
+  IsEnum,
+  IsInt,
+  IsOptional,
+  IsString,
+  IsUUID,
+  Max,
+  MaxLength,
+  Min,
+} from 'class-validator';
 import { ApiPropertyOptional, OmitType } from '@nestjs/swagger';
 import {
   FollowUpAlertStatus,
@@ -25,6 +34,24 @@ export class ListAlertsQueryDto {
   @IsOptional()
   @IsUUID()
   opportunityId?: string;
+
+  @ApiPropertyOptional({
+    example: 'Tech Alpha',
+    maxLength: 120,
+    description: 'Busca pelo nome do cliente ou código da oportunidade.',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  search?: string;
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description: 'Filtra alertas pelo vendedor responsável pela oportunidade.',
+  })
+  @IsOptional()
+  @IsUUID()
+  salespersonId?: string;
 
   @ApiPropertyOptional({ type: Number, minimum: 1, default: 1 })
   @IsOptional()

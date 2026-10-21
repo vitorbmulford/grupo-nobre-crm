@@ -37,7 +37,38 @@ export const queryKeys = {
     ["opportunities", "activities", id] as const,
   salespeople: ["salespeople"] as const,
   alerts: ["alerts"] as const,
+  alertList: (filters: AlertListFilters) =>
+    ["alerts", "list", filters] as const,
+  openAlertCount: ["alerts", "open-count"] as const,
 };
+
+export type AlertListFilters = {
+  page: number;
+  limit: number;
+  status?: "OPEN" | "RESOLVED";
+  type?: FollowUpAlert["type"];
+  opportunityId?: string;
+  search?: string;
+  salespersonId?: string;
+};
+
+export const alertsQuery = (filters: AlertListFilters) =>
+  queryOptions({
+    queryKey: queryKeys.alertList(filters),
+    queryFn: ({ signal }) =>
+      api.get<PageResponse<FollowUpAlert>>("/alerts", filters, signal),
+  });
+
+export const openAlertCountQuery = queryOptions({
+  queryKey: queryKeys.openAlertCount,
+  queryFn: ({ signal }) =>
+    api.get<PageResponse<FollowUpAlert>>(
+      "/alerts",
+      { page: 1, limit: 1, status: "OPEN" },
+      signal,
+    ),
+  select: (response) => response.meta.total,
+});
 
 export type OpportunityListFilters = {
   page: number;
@@ -132,13 +163,3 @@ export const pipelineStageQuery = ({
         ? lastPage.meta.page + 1
         : undefined,
   });
-
-export const openAlertsQuery = queryOptions({
-  queryKey: queryKeys.alerts,
-  queryFn: ({ signal }) =>
-    api.get<PageResponse<FollowUpAlert>>(
-      "/alerts",
-      { page: 1, limit: 100, status: "OPEN" },
-      signal,
-    ),
-});

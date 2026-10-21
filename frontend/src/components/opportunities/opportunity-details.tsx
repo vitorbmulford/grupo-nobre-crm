@@ -5,7 +5,7 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Pencil, Trash2 } from "lucide-react";
+import { ArrowRight, Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
@@ -116,6 +116,17 @@ export function OpportunityDetails({
           </div>
         </div>
         <div className="flex shrink-0 flex-wrap gap-2">
+          <Button
+            variant="outline"
+            nativeButton={false}
+            render={
+              <Link
+                href={`/pipeline?search=${encodeURIComponent(opportunity.code)}`}
+              />
+            }
+          >
+            Acompanhar na pipeline <ArrowRight aria-hidden="true" />
+          </Button>
           <Button
             variant="outline"
             nativeButton={false}

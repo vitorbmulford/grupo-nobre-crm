@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { PinoLogger } from 'nestjs-pino';
 import { Prisma } from '../generated/prisma/client.js';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { searchTerms } from '../common/search-terms.js';
 import {
   ListAlertsQueryDto,
   ListOpportunityAlertsQueryDto,
@@ -42,25 +43,63 @@ export class AlertsService {
   async list(query: ListAlertsQueryDto, defaultOpen = false) {
     const page = query.page ?? 1;
     const limit = query.limit ?? 20;
-    const where: Prisma.FollowUpAlertWhereInput = {
-      ...(query.status
-        ? { status: query.status }
-        : defaultOpen
-          ? { status: 'OPEN' }
+    const search = query.search?.trim();
+    const loadPage = async (terms?: string[]) => {
+      const where: Prisma.FollowUpAlertWhereInput = {
+        ...(query.status
+          ? { status: query.status }
+          : defaultOpen
+            ? { status: 'OPEN' }
+            : {}),
+        ...(query.type ? { type: query.type } : {}),
+        ...(query.opportunityId ? { opportunityId: query.opportunityId } : {}),
+        ...(search || query.salespersonId
+          ? {
+              opportunity: {
+                is: {
+                  ...(query.salespersonId
+                    ? { salespersonId: query.salespersonId }
+                    : {}),
+                  ...(terms
+                    ? {
+                        OR: terms.flatMap((term) => [
+                          {
+                            code: {
+                              contains: term,
+                              mode: 'insensitive' as const,
+                            },
+                          },
+                          {
+                            companyName: {
+                              contains: term,
+                              mode: 'insensitive' as const,
+                            },
+                          },
+                        ]),
+                      }
+                    : {}),
+                },
+              },
+            }
           : {}),
-      ...(query.type ? { type: query.type } : {}),
-      ...(query.opportunityId ? { opportunityId: query.opportunityId } : {}),
+      };
+      const [total, data] = await Promise.all([
+        this.prisma.followUpAlert.count({ where }),
+        this.prisma.followUpAlert.findMany({
+          where,
+          include: { opportunity: { select: alertOpportunity } },
+          orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
+          skip: (page - 1) * limit,
+          take: limit,
+        }),
+      ]);
+      return { total, data };
     };
-    const [total, data] = await Promise.all([
-      this.prisma.followUpAlert.count({ where }),
-      this.prisma.followUpAlert.findMany({
-        where,
-        include: { opportunity: { select: alertOpportunity } },
-        orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
-        skip: (page - 1) * limit,
-        take: limit,
-      }),
-    ]);
+    let { total, data } = await loadPage(search ? [search] : undefined);
+    if (total === 0 && search) {
+      const alternatives = searchTerms(search).slice(1);
+      if (alternatives.length) ({ total, data } = await loadPage(alternatives));
+    }
     return {
       data: data.map(serializeAlert),
       meta: { page, limit, total, totalPages: Math.ceil(total / limit) },
@@ -81,6 +120,8 @@ export class AlertsService {
         status: query.status,
         type: query.type,
         opportunityId,
+        search: query.search,
+        salespersonId: query.salespersonId,
         page: query.page,
         limit: query.limit,
       },
