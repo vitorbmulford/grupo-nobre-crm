@@ -20,10 +20,7 @@ services:
     command: ["postgres", "-p", "${POSTGRES_PORT:-5432}"]
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    ports:
-      - "127.0.0.1:${POSTGRES_HOST_PORT:-5436}:${POSTGRES_PORT:-5432}"
     networks:
-      app_local_access: {}
       app_internal:
         aliases:
           - ${POSTGRES_HOST:-postgres}
@@ -61,13 +58,11 @@ services:
       NODE_ENV: ${NODE_ENV:-production}
       PORT: ${PORT:-3001}
       LOG_LEVEL: ${LOG_LEVEL:-info}
-      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost,http://localhost:3000}
       FOLLOW_UP_EVALUATION_INTERVAL_MS: ${FOLLOW_UP_EVALUATION_INTERVAL_MS:-900000}
       FOLLOW_UP_STALE_CONTACT_DAYS: ${FOLLOW_UP_STALE_CONTACT_DAYS:-7}
       FOLLOW_UP_CUSTOMER_EVENT_WINDOW_DAYS: ${FOLLOW_UP_CUSTOMER_EVENT_WINDOW_DAYS:-7}
       DATABASE_URL: postgresql://${POSTGRES_USER:-grupo_nobre}:${POSTGRES_PASSWORD:-local_dev_password}@${POSTGRES_HOST:-postgres}:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-grupo_nobre_crm}?schema=public
-    ports:
-      - "127.0.0.1:${BACKEND_HOST_PORT:-3001}:${PORT:-3001}"
     depends_on:
       postgres:
         condition: service_healthy
@@ -91,10 +86,8 @@ services:
     build:
       <<: *frontend-build
       args:
-        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3001/api}
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-/api}
     restart: unless-stopped
-    ports:
-      - "127.0.0.1:${FRONTEND_HOST_PORT:-3000}:3000"
     depends_on:
       backend:
         condition: service_healthy
@@ -111,6 +104,28 @@ services:
       retries: 5
       start_period: 15s
 
+  nginx:
+    image: nginx:1.28-alpine
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${HTTP_HOST_PORT:-80}:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+    depends_on:
+      backend:
+        condition: service_healthy
+      frontend:
+        condition: service_healthy
+    networks:
+      - app_ingress
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/api/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
 volumes:
   postgres_data:
 
@@ -118,7 +133,5 @@ networks:
   app_internal:
     internal: true
     name: grupo-nobre-crm_internal
-  app_local_access:
-    name: grupo-nobre-crm_local_access
   app_ingress:
     driver: bridge

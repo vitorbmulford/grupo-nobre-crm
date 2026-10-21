@@ -10,21 +10,45 @@ cp .env.example .env
 docker compose up --build
 ```
 
-For local Nest development with PostgreSQL in Docker, run:
+The application is available through Nginx at `http://localhost`. Nginx routes
+`/api/*` to Nest and all other paths (including `/_next/*`) to Next.js. The API
+health endpoint and Swagger UI are `http://localhost/api/health` and
+`http://localhost/api/docs`. Only Nginx publishes a host port; PostgreSQL,
+backend, and frontend remain on Docker networks. PostgreSQL is attached only to
+the internal network and is not reachable from the host.
+
+For local Nest development outside Docker, use a PostgreSQL instance available
+to the host and configure `DATABASE_URL` accordingly, then run:
 
 ```bash
-docker compose up -d postgres migrate
 cd backend && npm run start:dev
 ```
 
-The local API listens on port 3002 while the Docker API uses port 3001.
-PostgreSQL is published only on loopback port 5436 for the local process.
+The local API listens on port 3002. Data used by the Docker stack is stored in
+the existing named `postgres_data` volume.
 
-The Docker API is available at `http://localhost:3001`; its readiness endpoint is
-`http://localhost:3001/api/health`, and Swagger UI is at
-`http://localhost:3001/api/docs`. PostgreSQL is published only on
-`127.0.0.1:5436` for local Nest development. Data is stored in the named
-`postgres_data` volume.
+### Frontend hot reload through Nginx
+
+To keep Nginx and the Docker backend/database running while Next.js runs on the
+host, stop the standard Docker frontend and Nginx, then start the local Nginx
+configuration:
+
+```bash
+docker compose stop frontend nginx
+docker compose -f compose.yaml -f compose.local.yaml up -d postgres migrate backend nginx-local
+```
+
+In another terminal, run Next.js with the same-origin API path:
+
+```bash
+cd frontend
+NEXT_PUBLIC_API_URL=/api npm run dev
+```
+
+Open `http://localhost`. The local Nginx service routes `/api/*` to the Docker
+backend and all other paths to the Next.js development server on host port
+3000. To return to the fully containerized frontend, stop `nginx-local` with
+the same two Compose files and run `docker compose up -d --build`.
 
 The `migrate` service runs `prisma migrate deploy` and then the idempotent case
 seed after PostgreSQL is healthy. The backend waits for that service to complete
@@ -34,27 +58,29 @@ in the startup flow.
 
 `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_DB`, `POSTGRES_USER`, and
 `POSTGRES_PASSWORD` configure PostgreSQL and are used to construct the
-backend's `DATABASE_URL`. `PORT` is the backend's listening port and
-`BACKEND_HOST_PORT` is the loopback host port published to the developer
-machine. `NODE_ENV` selects the runtime environment. `LOG_LEVEL` controls Pino,
-and `CORS_ORIGINS` is a comma-separated allowlist of exact HTTP(S) origins
-(defaulting to `http://localhost:3000`). The API returns `X-Correlation-ID` for
-every request and uses a standardized error body; see
+backend's `DATABASE_URL`. `PORT` is the backend's listening port. `HTTP_HOST_PORT`
+sets the Nginx host port (default `80`). `NEXT_PUBLIC_API_URL` is baked into the
+frontend during the Compose build and defaults to the same-origin path `/api`;
+rebuild the frontend after changing it. `NODE_ENV` selects the runtime
+environment. `LOG_LEVEL` controls Pino, and `CORS_ORIGINS` is a comma-separated
+allowlist of exact HTTP(S) origins (defaulting to `http://localhost` and
+`http://localhost:3000` for direct local development). The API returns
+`X-Correlation-ID` for every request and uses a standardized error body; see
 [`backend/README.md`](backend/README.md) for the HTTP, security, and logging
 behavior. Use URL-encoded characters in database credentials if they contain reserved URL characters such as `@`,
 `:`, `/`, or `#`.
 
 The Compose network `app_internal` isolates PostgreSQL and the migration job.
-The backend and frontend join `app_ingress`; PostgreSQL is not exposed to the
-frontend. The browser calls the API through the backend's published host port.
+Nginx, backend, and frontend communicate over `app_ingress`; only Nginx is
+published to the host. The browser uses the same origin for the frontend and API.
 
 ## Frontend
 
 The CRM frontend uses Next.js and is included in the Compose stack. Start the
 full application with `docker compose up --build`; open
-`http://localhost:3000`. For local Next.js development, configure
+`http://localhost`. For local Next.js development, configure
 `frontend/.env.local` from [`frontend/.env.example`](frontend/.env.example)
-with `NEXT_PUBLIC_API_URL=http://localhost:3001/api`, then run `npm ci` and
+with `NEXT_PUBLIC_API_URL=http://localhost:3002/api`, then run `npm ci` and
 `npm run dev` in `frontend/`. See [`frontend/README.md`](frontend/README.md) for
 the architecture, scripts, data behavior, and current scope.
 
@@ -70,7 +96,7 @@ Stage changes use a dedicated pipeline endpoint with optimistic concurrency and
 append-only transition history; the backend README documents its rules and
 examples.
 
-The backend evaluates follow-up risks every 15 minutes and stores
+The backend evaluates follow-up risks at startup and every 15 minutes and stores
 deduplicated, resolvable alerts in PostgreSQL. The risk types, configuration,
 manual acknowledgment behavior, API, case-date scenarios, and test commands are
 documented in [`backend/README.md`](backend/README.md#follow-up-risk-automation).

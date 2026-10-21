@@ -22,12 +22,14 @@ cd backend && npm run start:dev
 ```
 
 The host-based API listens on `http://localhost:3002` by default; set
-`LOCAL_PORT` to use another port. Docker publishes its API on port 3001 and
-PostgreSQL on `127.0.0.1:5436`, so both API runtimes can run at the same time.
+`LOCAL_PORT` to use another port. The Docker API is internal to the Compose
+network and is reached through the Nginx origin at `http://localhost/api`.
+PostgreSQL in Compose is not published to the host; host-based Nest development
+needs a PostgreSQL instance accessible to the host and a matching `DATABASE_URL`.
 
-The API listens at `http://localhost:3001`. Swagger UI is at
-`http://localhost:3001/api/docs`, and readiness is checked at
-`http://localhost:3001/api/health`. The health endpoint checks the API and a
+The Docker API is routed through Nginx. Swagger UI is at
+`http://localhost/api/docs`, and readiness is checked at
+`http://localhost/api/health`. The health endpoint checks the API and a
 real PostgreSQL query; unavailable dependencies return HTTP 503 without
 database details.
 
@@ -58,7 +60,8 @@ use independent request context from `pino-http`.
 ## CORS, security, and logs
 
 `CORS_ORIGINS` is a comma-separated allowlist of exact HTTP or HTTPS origins;
-it defaults to `http://localhost:3000`. Wildcards, paths, and non-HTTP schemes
+it defaults to `http://localhost,http://localhost:3000` for the proxy and direct
+local frontend development. Wildcards, paths, and non-HTTP schemes
 are rejected by Joi. CORS does not enable credentials. It allows the
 `X-Correlation-ID` request header and exposes the response header to browsers.
 
@@ -102,8 +105,7 @@ the defaults. The Compose source variables are:
 | `POSTGRES_DB` | PostgreSQL database name |
 | `POSTGRES_USER` | PostgreSQL username |
 | `POSTGRES_PASSWORD` | Local PostgreSQL password |
-| `POSTGRES_HOST_PORT` | Loopback host port published for PostgreSQL (default `5436`) |
-| `BACKEND_HOST_PORT` | Loopback port published on the host |
+| `HTTP_HOST_PORT` | Host port published by Nginx (default `80`) |
 
 Compose constructs the backend's container `DATABASE_URL` from `POSTGRES_*`.
 The host-based Nest process loads `DATABASE_URL` from the root `.env` file.
@@ -285,7 +287,8 @@ returns when contact volume is high. Alerts are private CRM records for a future
 interface; they do not send email, WhatsApp, SMS, push messages, or other
 customer communications.
 
-`@nestjs/schedule` evaluates active opportunities every 15 minutes by default.
+`@nestjs/schedule` evaluates active opportunities at backend startup and every
+15 minutes by default.
 The interval and date windows can be configured in the environment:
 
 | Variable | Default | Meaning |

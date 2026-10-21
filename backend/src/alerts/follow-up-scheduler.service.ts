@@ -25,6 +25,7 @@ export class FollowUpSchedulerService implements OnModuleInit {
     const interval = setInterval(() => void this.run(), intervalMs);
     interval.unref?.();
     this.schedulerRegistry.addInterval(INTERVAL_NAME, interval);
+    void this.run();
   }
 
   async run(): Promise<void> {

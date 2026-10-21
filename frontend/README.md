@@ -49,9 +49,9 @@ Crie `frontend/.env.local` com base em `.env.example`:
 NEXT_PUBLIC_API_URL=http://localhost:3001/api
 ```
 
-Essa URL é usada pelo navegador. Em Docker, o Compose injeta `NEXT_PUBLIC_API_URL` como argumento de build, com o padrão `http://localhost:3001/api`, que aponta para a porta publicada do backend na máquina do usuário. O hostname interno `backend` não pode ser resolvido pelo navegador. Para trocar a URL pública no Compose, defina `NEXT_PUBLIC_API_URL` antes do build; alterações exigem reconstruir a imagem porque valores `NEXT_PUBLIC_*` são incorporados ao bundle do cliente.
+Essa URL é usada pelo navegador no desenvolvimento fora do Docker, quando o Nest local escuta em `localhost:3002`. No Compose, o valor padrão é `/api`: o navegador mantém a origem `http://localhost` e o Nginx encaminha a chamada ao backend. O Compose injeta o valor como argumento de build porque variáveis `NEXT_PUBLIC_*` são incorporadas ao bundle do cliente; alterações no valor do Compose exigem reconstruir a imagem do frontend. O hostname interno `backend` não deve ser usado pelo navegador.
 
-O backend permite por padrão `http://localhost:3000` em `CORS_ORIGINS`. Se a porta publicada do frontend mudar, ajuste a allowlist para a origem exata do navegador. Nenhum segredo é enviado ao cliente.
+O backend permite `http://localhost` para o acesso pela origem única do proxy e `http://localhost:3000` para desenvolvimento local direto. Nenhum segredo é enviado ao cliente.
 
 ## Execução com Docker
 
@@ -61,13 +61,13 @@ Na raiz do monorepo, configure o `.env` conforme o README principal e execute:
 docker compose up --build
 ```
 
-O frontend estará em `http://localhost:3000`. A imagem usa build multi-stage, `output: standalone`, processo sem root e healthcheck. O serviço aguarda a API ficar saudável. PostgreSQL e migrations continuam sob a configuração existente do Compose.
+O frontend estará em `http://localhost`, servido pelo Nginx. O serviço usa build multi-stage, `output: standalone`, processo sem root e healthcheck. Nginx aguarda frontend e backend saudáveis; o frontend aguarda a API. PostgreSQL e migrations permanecem sob a configuração do Compose, e somente Nginx publica uma porta no host.
 
 ## Páginas e dados
 
 - `/` redireciona para `/opportunities`.
 - `/opportunities` pesquisa por empresa ou código, usa a paginação de `GET /api/opportunities` e apresenta os campos fornecidos pela API.
-- `/pipeline` apresenta as seis etapas oficiais e prepara a estrutura para o quadro. A consulta agregada por todas as páginas e a interação do Kanban ficam para a próxima etapa.
+- `/pipeline` consulta todas as páginas de `GET /api/opportunities` e agrupa as oportunidades pelas seis etapas oficiais. A movimentação Kanban fica para a próxima etapa.
 - `/alerts` consulta alertas abertos em `GET /api/alerts` e mostra estados de carregamento, erro e lista vazia.
 
 Os contratos preservam dinheiro como string decimal, datas de calendário como `YYYY-MM-DD` e timestamps como instantes ISO com offset. A listagem não usa dados de demonstração. O cliente HTTP centraliza URL, query string, JSON, respostas sem corpo, erros padronizados, status, AbortSignal e falhas de rede. A interface mantém o texto útil enviado pelo backend; erros sem mensagem específica recebem uma mensagem de fallback.
