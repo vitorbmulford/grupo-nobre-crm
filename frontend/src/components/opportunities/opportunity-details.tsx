@@ -7,7 +7,6 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -18,11 +17,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import {
-  EmptyState,
-  ErrorState,
-  LoadingState,
-} from "@/components/shared/request-states";
+import { ErrorState, LoadingState } from "@/components/shared/request-states";
 import { BackLink } from "@/components/shared/back-link";
 import { StageBadge } from "@/components/shared/stage-badge";
 import { opportunityQuery, queryKeys } from "@/lib/api/queries";
@@ -38,6 +33,7 @@ import {
   formatDateTime,
   formatNextFollowUp,
 } from "@/lib/format";
+import { OpportunityCommercialHistory } from "@/components/opportunities/opportunity-commercial-history";
 
 export function OpportunityDetails({
   id,
@@ -135,126 +131,108 @@ export function OpportunityDetails({
         </div>
       </header>
 
-      <div className="grid items-start gap-5 pt-2 lg:grid-cols-[minmax(0,1fr)_22rem]">
-        <Card className="gap-0 p-0">
-          <div className="border-b px-5 py-4 sm:px-6">
-            <h2 id="opportunity-follow-up-title" className="font-semibold">
-              Acompanhamento
-            </h2>
-            <p className="text-muted-foreground mt-1 text-sm">
-              Datas importantes para conduzir esta negociação.
-            </p>
-          </div>
-          <dl
-            aria-labelledby="opportunity-follow-up-title"
-            className="divide-y"
-          >
-            <Detail label="Próximo follow-up" highlight>
-              {formatNextFollowUp(opportunity.nextFollowUpAt)}
-            </Detail>
-            <Detail label="Último contato">
-              {formatDate(opportunity.lastContactAt)}
-            </Detail>
-            <Detail label="Validade da proposta">
-              {formatDate(opportunity.proposalValidUntil)}
-            </Detail>
-            <Detail label="Evento do cliente">
-              {formatDate(opportunity.customerEventDate)}
-            </Detail>
-            <Detail label="Última atualização">
-              {formatDateTime(opportunity.updatedAt)}
-            </Detail>
-          </dl>
-          {hasUnscheduledFollowUp && (
-            <div
-              role="status"
-              className="border-primary/25 bg-primary/5 flex flex-col gap-3 border-t px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6"
-            >
-              <p className="text-sm">
-                Nenhum próximo contato foi agendado para esta oportunidade.
-              </p>
-              <Button
-                size="sm"
-                variant="outline"
-                nativeButton={false}
-                render={
-                  <Link href={`${editHref}#nextFollowUpAt`} />
-                }
-              >
-                Agendar retorno
-              </Button>
-            </div>
-          )}
-          {opportunity.lossReason && (
-            <div className="bg-muted/40 border-t px-5 py-4 sm:px-6">
-              <p className="text-muted-foreground text-xs font-medium">
-                Motivo de perda
-              </p>
-              <p className="mt-1 text-sm leading-relaxed">
-                {opportunity.lossReason}
-              </p>
-            </div>
-          )}
-        </Card>
-
-        <aside className="space-y-5">
-          <Card className="gap-5 p-5">
-            <div>
-              <h2 className="font-semibold">Resumo comercial</h2>
-              <p className="text-muted-foreground mt-1 text-sm">
-                Responsável e valor da oportunidade.
-              </p>
-            </div>
-            <dl className="space-y-5">
-              <SummaryItem label="Vendedora responsável">
-                {opportunity.salesperson?.name ?? "Sem vendedor"}
-              </SummaryItem>
-              <SummaryItem label="Valor estimado" prominent>
-                {formatCurrency(opportunity.estimatedValue)}
-              </SummaryItem>
-            </dl>
-          </Card>
-
-          <Card className="gap-3 p-5">
-            <div className="flex items-baseline justify-between gap-3">
-              <div>
-                <h2 id="opportunity-items-title" className="font-semibold">
-                  Itens de brinde
-                </h2>
-                <p className="text-muted-foreground mt-1 text-sm">
-                  Produtos desta oportunidade.
-                </p>
+      <section aria-label="Resumo da oportunidade">
+        <dl className="grid gap-6 sm:grid-cols-3">
+          <SummaryItem label="Valor estimado" prominent>
+            {formatCurrency(opportunity.estimatedValue)}
+          </SummaryItem>
+          <SummaryItem label="Vendedora responsável">
+            {opportunity.salesperson?.name ?? "Sem vendedor"}
+          </SummaryItem>
+          <SummaryItem label="Próximo follow-up" highlight>
+            {formatNextFollowUp(opportunity.nextFollowUpAt)}
+          </SummaryItem>
+        </dl>
+      </section>
+      <OpportunityCommercialHistory
+        opportunityId={opportunity.id}
+        aside={
+          <>
+            <section aria-labelledby="opportunity-items-title">
+              <div className="flex items-baseline justify-between gap-3">
+                <div>
+                  <h2 id="opportunity-items-title" className="font-semibold">
+                    Itens da oportunidade
+                  </h2>
+                  <p className="text-muted-foreground mt-1 text-sm">
+                    Produtos incluídos na negociação.
+                  </p>
+                </div>
+                <span className="text-muted-foreground text-sm tabular-nums">
+                  {opportunity.items.length}
+                </span>
               </div>
-              <span className="text-muted-foreground shrink-0 text-sm tabular-nums">
-                {opportunity.items.length}
-              </span>
-            </div>
-            {opportunity.items.length === 0 ? (
-              <EmptyState
-                title="Sem itens cadastrados"
-                description="Os itens da negociação aparecerão aqui quando forem informados."
-              />
-            ) : (
-              <ul
-                aria-labelledby="opportunity-items-title"
-                className="divide-y"
-              >
-                {opportunity.items.map((item) => (
-                  <li
-                    key={item.id}
-                    className="flex items-center justify-between gap-4 py-3 first:pt-1 last:pb-0"
+              {opportunity.items.length === 0 ? (
+                <p className="text-muted-foreground mt-4 text-sm">
+                  Nenhum item informado.
+                </p>
+              ) : (
+                <ul className="mt-3 divide-y">
+                  {opportunity.items.map((item) => (
+                    <li
+                      key={item.id}
+                      className="flex items-center justify-between gap-4 py-2.5"
+                    >
+                      <span className="text-sm font-medium">{item.name}</span>
+                      <span className="text-muted-foreground shrink-0 text-sm tabular-nums">
+                        {item.quantity.toLocaleString("pt-BR")} un.
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+            <section
+              className="border-t pt-5"
+              aria-labelledby="opportunity-dates-title"
+            >
+              <h2 id="opportunity-dates-title" className="font-semibold">
+                Datas comerciais
+              </h2>
+              <dl className="mt-3 space-y-3">
+                <Detail label="Último contato">
+                  {formatDate(opportunity.lastContactAt)}
+                </Detail>
+                <Detail label="Validade da proposta">
+                  {formatDate(opportunity.proposalValidUntil)}
+                </Detail>
+                <Detail label="Evento do cliente">
+                  {formatDate(opportunity.customerEventDate)}
+                </Detail>
+                <Detail label="Atualizada em">
+                  {formatDateTime(opportunity.updatedAt)}
+                </Detail>
+              </dl>
+              {hasUnscheduledFollowUp && (
+                <div role="status" className="bg-primary/5 mt-4 rounded-lg p-3">
+                  <p className="text-sm">
+                    Nenhum próximo contato foi agendado.
+                  </p>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="mt-3"
+                    nativeButton={false}
+                    render={<Link href={`${editHref}#nextFollowUpAt`} />}
                   >
-                    <span className="text-sm font-medium">{item.name}</span>
-                    <span className="text-muted-foreground shrink-0 text-sm tabular-nums">
-                      {item.quantity.toLocaleString("pt-BR")} un.
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </Card>
-        </aside>
-      </div>
+                    Agendar retorno
+                  </Button>
+                </div>
+              )}
+              {opportunity.lossReason && (
+                <div className="bg-muted/40 mt-4 rounded-lg p-3">
+                  <p className="text-muted-foreground text-xs font-medium">
+                    Motivo de perda
+                  </p>
+                  <p className="mt-1 text-sm leading-relaxed">
+                    {opportunity.lossReason}
+                  </p>
+                </div>
+              )}
+            </section>
+          </>
+        }
+      />
       <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -288,19 +266,23 @@ function SummaryItem({
   label,
   children,
   prominent = false,
+  highlight = false,
 }: {
   label: string;
   children: React.ReactNode;
   prominent?: boolean;
+  highlight?: boolean;
 }) {
   return (
-    <div className={prominent ? "border-primary border-l-2 pl-4" : "min-w-0"}>
+    <div className="min-w-0">
       <dt className="text-muted-foreground text-xs font-medium">{label}</dt>
       <dd
         className={`mt-1 truncate ${
           prominent
             ? "text-primary text-2xl font-semibold tracking-tight tabular-nums"
-            : "text-base font-medium"
+            : highlight
+              ? "text-primary text-base font-semibold"
+              : "text-base font-medium"
         }`}
       >
         {children}
@@ -319,7 +301,7 @@ function Detail({
   highlight?: boolean;
 }) {
   return (
-    <div className="flex flex-col gap-1 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6 sm:px-6">
+    <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
       <dt className="text-muted-foreground text-sm">{label}</dt>
       <dd
         className={`text-sm font-medium tabular-nums ${

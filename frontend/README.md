@@ -46,10 +46,16 @@ React Hook Form, Zod e `@hookform/resolvers` compõem os formulários comerciais
 Crie `frontend/.env.local` com base em `.env.example`:
 
 ```dotenv
-NEXT_PUBLIC_API_URL=http://localhost:3001/api
+NEXT_PUBLIC_API_URL=/api
+NEXT_LOCAL_API_ORIGIN=http://localhost:3002
 ```
 
-Essa URL é usada pelo navegador no desenvolvimento fora do Docker, quando o Nest local escuta em `localhost:3002`. No Compose, o valor padrão é `/api`: o navegador mantém a origem `http://localhost` e o Nginx encaminha a chamada ao backend. O Compose injeta o valor como argumento de build porque variáveis `NEXT_PUBLIC_*` são incorporadas ao bundle do cliente; alterações no valor do Compose exigem reconstruir a imagem do frontend. O hostname interno `backend` não deve ser usado pelo navegador.
+O navegador chama sempre `/api`, mantendo a mesma origem. Durante `next dev`, o
+rewrite do Next encaminha esse caminho a `NEXT_LOCAL_API_ORIGIN`, cujo padrão é
+o Nest local em `http://localhost:3002`. Quando Nginx está em uso, ele recebe
+`/api` antes do Next e encaminha a chamada diretamente ao backend. A imagem
+Docker fixa `/api` no build e `frontend/.env.local` é excluído do contexto de
+build; o hostname interno `backend` nunca é exposto ao navegador.
 
 O backend permite `http://localhost` para o acesso pela origem única do proxy e `http://localhost:3000` para desenvolvimento local direto. Nenhum segredo é enviado ao cliente.
 

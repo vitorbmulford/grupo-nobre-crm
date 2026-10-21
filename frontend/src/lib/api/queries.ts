@@ -7,6 +7,8 @@ import type {
   OpportunityStage,
   PageResponse,
   Salesperson,
+  Activity,
+  StageTransition,
 } from "@/types/api";
 
 export const queryKeys = {
@@ -30,6 +32,9 @@ export const queryKeys = {
   opportunityList: (filters: OpportunityListFilters) =>
     ["opportunities", "list", filters] as const,
   opportunity: (id: string) => ["opportunities", "detail", id] as const,
+  opportunityHistory: (id: string) => ["opportunities", "history", id] as const,
+  opportunityActivities: (id: string) =>
+    ["opportunities", "activities", id] as const,
   salespeople: ["salespeople"] as const,
   alerts: ["alerts"] as const,
 };
@@ -59,6 +64,33 @@ export const opportunityQuery = (id: string) =>
     queryKey: queryKeys.opportunity(id),
     queryFn: ({ signal }) =>
       api.get<Opportunity>(`/opportunities/${id}`, undefined, signal),
+  });
+
+export const opportunityHistoryQuery = (id: string) =>
+  queryOptions({
+    queryKey: queryKeys.opportunityHistory(id),
+    queryFn: ({ signal }) =>
+      api.get<StageTransition[]>(
+        `/opportunities/${id}/history`,
+        undefined,
+        signal,
+      ),
+  });
+
+export const opportunityActivitiesQuery = (id: string) =>
+  infiniteQueryOptions({
+    queryKey: queryKeys.opportunityActivities(id),
+    initialPageParam: 1,
+    queryFn: ({ signal, pageParam }) =>
+      api.get<PageResponse<Activity>>(
+        `/opportunities/${id}/activities`,
+        { page: pageParam, limit: 100 },
+        signal,
+      ),
+    getNextPageParam: (lastPage) =>
+      lastPage.meta.page < lastPage.meta.totalPages
+        ? lastPage.meta.page + 1
+        : undefined,
   });
 
 export const salespeopleQuery = queryOptions({

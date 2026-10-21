@@ -1,9 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { api, ApiError, apiRequest } from "@/lib/api/client";
+import { api, apiBaseUrl, ApiError, apiRequest } from "@/lib/api/client";
 
 afterEach(() => vi.unstubAllGlobals());
 
 describe("HTTP client", () => {
+  it("uses the same-origin API path by default", () => {
+    expect(apiBaseUrl).toBe("/api");
+  });
+
   it("builds query strings and returns typed JSON", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ data: [] }), {
