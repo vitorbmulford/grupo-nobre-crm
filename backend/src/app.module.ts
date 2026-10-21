@@ -32,7 +32,7 @@ import { AlertsModule } from './alerts/alerts.module.js';
             .valid('fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent')
             .default('info'),
           CORS_ORIGINS: Joi.string()
-            .default('http://localhost:3000')
+            .default('http://localhost,http://localhost:3000')
             .custom((value, helpers) => {
               const origins = value
                 .split(',')
