@@ -28,3 +28,8 @@ export function formatDateTime(value: string | null | undefined): string {
     ? format(date, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })
     : "—";
 }
+
+/** Formats the optional return schedule without making an unscheduled return look like missing data. */
+export function formatNextFollowUp(value: string | null | undefined): string {
+  return value ? formatDateTime(value) : "Não agendado";
+}

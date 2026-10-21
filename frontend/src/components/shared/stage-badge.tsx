@@ -4,9 +4,9 @@ import type { OpportunityStage } from "@/types/api";
 
 const tones: Record<OpportunityStage, string> = {
   PRIMEIRO_CONTATO:
-    "border-slate-200 bg-slate-50 text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200",
+    "border-border bg-muted/60 text-muted-foreground dark:border-border dark:bg-muted/50 dark:text-muted-foreground",
   APRESENTACAO_ORCAMENTO:
-    "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900 dark:bg-blue-950 dark:text-blue-200",
+    "border-border bg-muted/60 text-foreground dark:border-border dark:bg-muted/50",
   FOLLOW_UP:
     "border-[#e1be68]/60 bg-[#e1be68]/15 text-[#6d5519] dark:border-[#e1be68]/30 dark:bg-[#e1be68]/10 dark:text-[#e1be68]",
   FORECAST:
@@ -14,7 +14,7 @@ const tones: Record<OpportunityStage, string> = {
   FECHAMENTO:
     "border-[#83b735]/35 bg-[#83b735]/10 text-[#4c6b1f] dark:border-[#83b735]/30 dark:bg-[#83b735]/15 dark:text-[#a9dc65]",
   PERDIDA:
-    "border-slate-200 bg-slate-100 text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300",
+    "border-destructive/25 bg-destructive/10 text-destructive dark:border-destructive/30 dark:bg-destructive/15",
 };
 
 export function StageBadge({ stage }: { stage: OpportunityStage }) {
