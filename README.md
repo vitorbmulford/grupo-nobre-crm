@@ -27,28 +27,72 @@ cd backend && npm run start:dev
 The local API listens on port 3002. Data used by the Docker stack is stored in
 the existing named `postgres_data` volume.
 
-### Frontend hot reload through Nginx
+### Ambientes de execução
 
-To keep Nginx and the Docker backend/database running while Next.js runs on the
-host, stop the standard Docker frontend and Nginx, then start the local Nginx
-configuration:
+O navegador sempre chama a API por `/api`. Cada cenário tem somente um proxy
+ativo para esse caminho: Nginx nos cenários com Docker e o rewrite do Next no
+desenvolvimento totalmente local.
+
+#### Frontend local + backend e Nginx no Docker
+
+Use este cenário para hot reload no Next.js mantendo a API e o banco no
+Compose. Pare o frontend/Nginx padrão e inicie o Nginx voltado ao host:
 
 ```bash
 docker compose stop frontend nginx
 docker compose -f compose.yaml -f compose.local.yaml up -d postgres migrate backend nginx-local
 ```
 
-In another terminal, run Next.js with the same-origin API path:
+Em outro terminal, prepare as variáveis locais do frontend uma única vez e
+inicie o Next.js:
 
 ```bash
 cd frontend
-NEXT_PUBLIC_API_URL=/api npm run dev
+cp .env.example .env.local
+npm ci
+npm run dev
 ```
 
-Open `http://localhost`. The local Nginx service routes `/api/*` to the Docker
-backend and all other paths to the Next.js development server on host port
-3000. To return to the fully containerized frontend, stop `nginx-local` with
-the same two Compose files and run `docker compose up -d --build`.
+Abra `http://localhost`. O Nginx local encaminha `/api/*` ao backend Docker e
+as demais rotas ao Next em `localhost:3000`. O rewrite do Next não recebe
+essas chamadas. Para retornar ao frontend containerizado, pare `nginx-local`
+com os mesmos arquivos Compose e execute `docker compose up -d --build`.
+
+#### Aplicação completa no Docker
+
+Na raiz, copie `.env.example` para `.env` se ainda não existir e execute:
+
+```bash
+docker compose up --build
+```
+
+Abra `http://localhost`. Nginx é o único proxy de `/api`; a imagem do frontend
+é sempre construída com `/api` e não lê `frontend/.env.local`.
+
+#### Frontend e backend locais, sem Nginx
+
+Configure um PostgreSQL acessível pela `DATABASE_URL` do `.env` da raiz e
+inicie o Nest localmente:
+
+```bash
+cd backend
+npm ci
+npm run start:dev
+```
+
+Em outro terminal, execute:
+
+```bash
+cd frontend
+cp .env.example .env.local
+npm ci
+npm run dev
+```
+
+Abra `http://localhost:3000`. Em desenvolvimento, o Next encaminha
+`/api/*` para `NEXT_LOCAL_API_ORIGIN` (por padrão,
+`http://localhost:3002`). Altere somente essa variável em `.env.local` se o
+Nest usar outra porta.
 
 The `migrate` service runs `prisma migrate deploy` and then the idempotent case
 seed after PostgreSQL is healthy. The backend waits for that service to complete
@@ -59,9 +103,9 @@ in the startup flow.
 `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_DB`, `POSTGRES_USER`, and
 `POSTGRES_PASSWORD` configure PostgreSQL and are used to construct the
 backend's `DATABASE_URL`. `PORT` is the backend's listening port. `HTTP_HOST_PORT`
-sets the Nginx host port (default `80`). `NEXT_PUBLIC_API_URL` is baked into the
-frontend during the Compose build and defaults to the same-origin path `/api`;
-rebuild the frontend after changing it. `NODE_ENV` selects the runtime
+sets the Nginx host port (default `80`). O frontend usa sempre o caminho
+relativo `/api`; `NEXT_LOCAL_API_ORIGIN` existe apenas em `frontend/.env.local`
+para o rewrite do Next em desenvolvimento. `NODE_ENV` selects the runtime
 environment. `LOG_LEVEL` controls Pino, and `CORS_ORIGINS` is a comma-separated
 allowlist of exact HTTP(S) origins (defaulting to `http://localhost` and
 `http://localhost:3000` for direct local development). The API returns
@@ -77,12 +121,12 @@ published to the host. The browser uses the same origin for the frontend and API
 ## Frontend
 
 The CRM frontend uses Next.js and is included in the Compose stack. Start the
-full application with `docker compose up --build`; open
-`http://localhost`. For local Next.js development, configure
-`frontend/.env.local` from [`frontend/.env.example`](frontend/.env.example)
-with `NEXT_PUBLIC_API_URL=http://localhost:3002/api`, then run `npm ci` and
-`npm run dev` in `frontend/`. See [`frontend/README.md`](frontend/README.md) for
-the architecture, scripts, data behavior, and current scope.
+full application with `docker compose up --build`; open `http://localhost`.
+For local Next.js development, copy
+[`frontend/.env.example`](frontend/.env.example) to `frontend/.env.local`, then
+run `npm ci` and `npm run dev` in `frontend/`. See
+[`frontend/README.md`](frontend/README.md) for the architecture, scripts, data
+behavior, and current scope.
 
 ## Opportunities and deletion policy
 
