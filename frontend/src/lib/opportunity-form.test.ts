@@ -1,8 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
+  ESTIMATED_VALUE_INPUT_PATTERN,
   formatConflictMessage,
+  formatContactPhoneInput,
   opportunityFormSchema,
   opportunityToFormValues,
+  sanitizeContactNameInput,
+  sanitizeLocationInput,
   sanitizeEstimatedValueInput,
   sanitizeQuantityInput,
   toOpportunityPayload,
@@ -10,6 +14,12 @@ import {
 
 const validForm = {
   companyName: "  Empresa Exemplo  ",
+  contactName: "",
+  contactPhone: "",
+  contactEmail: "",
+  companyWebsite: "",
+  companyLocation: "",
+  companyDescription: "",
   estimatedValue: "4500,50",
   lastContactAt: "2026-10-14",
   proposalValidUntil: "",
@@ -24,6 +34,13 @@ const validForm = {
 };
 
 describe("opportunity form validation and payload", () => {
+  it("accepts grouped estimated values in the browser input pattern", () => {
+    const inputPattern = new RegExp(`^(?:${ESTIMATED_VALUE_INPUT_PATTERN})$`);
+    expect(inputPattern.test("5.000.000.000")).toBe(true);
+    expect(inputPattern.test("5.000.000.000,00")).toBe(true);
+    expect(inputPattern.test("5000000000")).toBe(true);
+  });
+
   it("requires company and validates monetary precision and item quantities", () => {
     expect(opportunityFormSchema.safeParse(validForm).success).toBe(true);
     expect(
@@ -60,6 +77,15 @@ describe("opportunity form validation and payload", () => {
         estimatedValue: "1.234,50",
       }).success,
     ).toBe(true);
+    for (const estimatedValue of [
+      "5.000.000.000",
+      "5.000.000.000,00",
+    ]) {
+      expect(
+        opportunityFormSchema.safeParse({ ...validForm, estimatedValue })
+          .success,
+      ).toBe(true);
+    }
     expect(
       opportunityFormSchema.safeParse({
         ...validForm,
@@ -95,11 +121,25 @@ describe("opportunity form validation and payload", () => {
   it("sanitizes numeric fields and limits precision and input length", () => {
     expect(sanitizeEstimatedValueInput("R$ 123abc456,789")).toBe("123.456,78");
     expect(sanitizeEstimatedValueInput("2323232323")).toBe("2.323.232.323");
+    expect(sanitizeEstimatedValueInput("5.000.000.000,00")).toBe(
+      "5.000.000.000,00",
+    );
+    expect(sanitizeEstimatedValueInput("5.000.000.000")).toBe(
+      "5.000.000.000",
+    );
     expect(sanitizeEstimatedValueInput("123456789012345,00")).toBe(
       "123.456.789.012,00",
     );
     expect(sanitizeQuantityInput("12x3,4")).toBe("1234");
     expect(sanitizeQuantityInput("123456789012")).toBe("1234567890");
+    expect(sanitizeContactNameInput("João 123 da Silva!")).toBe(
+      "João da Silva",
+    );
+    expect(formatContactPhoneInput("11987654321")).toBe("(11) 98765-4321");
+    expect(formatContactPhoneInput("+55 (11) 98765-4321")).toBe(
+      "+55 (11) 98765-4321",
+    );
+    expect(sanitizeLocationInput("São Paulo 123, SP!")).toBe("São Paulo, SP");
   });
 
   it("converts empty fields to null and serializes calendar dates, money and timestamp separately", () => {
@@ -107,6 +147,12 @@ describe("opportunity form validation and payload", () => {
     const payload = toOpportunityPayload(parsed);
     expect(payload).toMatchObject({
       companyName: "Empresa Exemplo",
+      contactName: null,
+      contactPhone: null,
+      contactEmail: null,
+      companyWebsite: null,
+      companyLocation: null,
+      companyDescription: null,
       estimatedValue: "4500.50",
       lastContactAt: "2026-10-14",
       proposalValidUntil: null,
@@ -116,6 +162,103 @@ describe("opportunity form validation and payload", () => {
       items: [{ name: "Caneca personalizada", quantity: 300 }],
     });
     expect(payload.nextFollowUpAt).toMatch(/(?:Z|[+-]\d{2}:\d{2})$/);
+    expect(
+      toOpportunityPayload(
+        opportunityFormSchema.parse({
+          ...validForm,
+          estimatedValue: "5.000.000.000,00",
+        }),
+      ).estimatedValue,
+    ).toBe("5000000000.00");
+  });
+
+  it("accepts optional client details, validates supplied email and website, and clears whitespace", () => {
+    const details = {
+      contactName: " Mariana Souza ",
+      contactPhone: " (11) 99999-0000 ",
+      contactEmail: " mariana@empresa.com.br ",
+      companyWebsite: " www.empresa.com.br ",
+      companyLocation: " São Paulo, SP ",
+      companyDescription: " Produtos para escritório ",
+    };
+    const parsed = opportunityFormSchema.parse({ ...validForm, ...details });
+    expect(toOpportunityPayload(parsed)).toMatchObject({
+      contactName: "Mariana Souza",
+      contactPhone: "(11) 99999-0000",
+      contactEmail: "mariana@empresa.com.br",
+      companyWebsite: "www.empresa.com.br",
+      companyLocation: "São Paulo, SP",
+      companyDescription: "Produtos para escritório",
+    });
+    expect(
+      opportunityFormSchema.safeParse({
+        ...validForm,
+        contactEmail: "email-inválido",
+      }).success,
+    ).toBe(false);
+    expect(
+      opportunityFormSchema.safeParse({
+        ...validForm,
+        companyWebsite: "javascript:alert(1)",
+      }).success,
+    ).toBe(false);
+    expect(
+      opportunityFormSchema.safeParse({
+        ...validForm,
+        companyWebsite: "12e21e21e21e",
+      }).success,
+    ).toBe(false);
+    expect(
+      opportunityFormSchema.safeParse({
+        ...validForm,
+        contactName: "Pessoa 123",
+      }).success,
+    ).toBe(false);
+    expect(
+      opportunityFormSchema.safeParse({
+        ...validForm,
+        contactPhone: "'123 (11) 99999-0000",
+      }).success,
+    ).toBe(false);
+    expect(
+      opportunityFormSchema.safeParse({
+        ...validForm,
+        contactPhone: "1".repeat(31),
+      }).success,
+    ).toBe(false);
+    expect(
+      opportunityFormSchema.safeParse({
+        ...validForm,
+        contactPhone: "12345678901",
+      }).success,
+    ).toBe(true);
+    expect(
+      opportunityFormSchema.safeParse({
+        ...validForm,
+        companyLocation: "342243234243",
+      }).success,
+    ).toBe(false);
+    expect(
+      opportunityFormSchema.safeParse({
+        ...validForm,
+        companyLocation: "São Paulo 123, SP",
+      }).success,
+    ).toBe(false);
+    expect(
+      opportunityFormSchema.safeParse({
+        ...validForm,
+        companyDescription: "a".repeat(2001),
+      }).success,
+    ).toBe(false);
+    expect(
+      toOpportunityPayload(
+        opportunityFormSchema.parse({
+          ...validForm,
+          contactName: "   ",
+          companyDescription: "   ",
+        }),
+      ),
+    ).toMatchObject({ contactName: null, companyDescription: null });
   });
 
   it("supports scheduling, changing, and removing the next follow-up", () => {
@@ -146,6 +289,12 @@ describe("opportunity form validation and payload", () => {
         id: "opportunity-1",
         code: "OPP-1",
         companyName: "Empresa Exemplo",
+        contactName: null,
+        contactPhone: null,
+        contactEmail: null,
+        companyWebsite: null,
+        companyLocation: null,
+        companyDescription: null,
         stage: "PRIMEIRO_CONTATO",
         estimatedValue: "2323232323.50",
         lastContactAt: null,

@@ -52,6 +52,12 @@ model Opportunity {
   id                 String            @id @default(uuid()) @db.Uuid
   code               String            @unique @db.VarChar(32)
   companyName        String            @db.VarChar(240)
+  contactName        String?           @db.VarChar(160)
+  contactPhone       String?           @db.VarChar(30)
+  contactEmail       String?           @db.VarChar(254)
+  companyWebsite     String?           @db.VarChar(2048)
+  companyLocation    String?           @db.VarChar(240)
+  companyDescription String?           @db.VarChar(2000)
   stage              OpportunityStage  @default(PRIMEIRO_CONTATO)
   estimatedValue     Decimal?          @db.Decimal(14, 2)
   lastContactAt      DateTime?         @db.Date

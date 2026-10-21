@@ -1,11 +1,13 @@
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   IsArray,
   IsDateString,
+  IsEmail,
   IsInt,
   IsOptional,
   IsString,
   IsUUID,
+  IsUrl,
   Matches,
   MaxLength,
   Min,
@@ -34,6 +36,87 @@ export class CreateOpportunityDto {
   @Matches(/\S/, { message: 'companyName should not be empty' })
   @MaxLength(240)
   companyName!: string;
+
+  @ApiPropertyOptional({
+    example: 'Mariana Souza',
+    nullable: true,
+    maxLength: 160,
+  })
+  @Transform(({ value }) => trimOptionalText(value))
+  @ValidateIf((_object, value) => hasText(value))
+  @IsString()
+  @MaxLength(160)
+  @Matches(/^[\p{L}\p{M}][\p{L}\p{M} .,'’()/-]*$/u, {
+    message: 'contactName contains invalid characters',
+  })
+  contactName?: string | null;
+
+  @ApiPropertyOptional({
+    example: '(11) 99999-0000',
+    nullable: true,
+    maxLength: 30,
+  })
+  @Transform(({ value }) => trimOptionalText(value))
+  @ValidateIf((_object, value) => hasText(value))
+  @IsString()
+  @MaxLength(30)
+  @Matches(/^(?:\+?55\s*)?\(?\d{2}\)?\s*\d{4,5}-?\d{4}$/, {
+    message: 'Informe um telefone com DDD e número válido.',
+  })
+  contactPhone?: string | null;
+
+  @ApiPropertyOptional({
+    example: 'mariana@empresa.com.br',
+    nullable: true,
+    maxLength: 254,
+  })
+  @Transform(({ value }) => trimOptionalText(value))
+  @ValidateIf((_object, value) => hasText(value))
+  @IsString()
+  @MaxLength(254)
+  @IsEmail()
+  contactEmail?: string | null;
+
+  @ApiPropertyOptional({
+    example: 'www.empresa.com.br',
+    nullable: true,
+    maxLength: 2048,
+  })
+  @Transform(({ value }) => trimOptionalText(value))
+  @ValidateIf((_object, value) => hasText(value))
+  @IsString()
+  @MaxLength(2048)
+  @IsUrl({ require_protocol: false, protocols: ['http', 'https'] })
+  @Matches(
+    /^(?:https?:\/\/)?(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}(?::\d{1,5})?(?:[/?#][^\s]*)?$/i,
+    { message: 'companyWebsite must be a valid website address' },
+  )
+  companyWebsite?: string | null;
+
+  @ApiPropertyOptional({
+    example: 'São Paulo, SP',
+    nullable: true,
+    maxLength: 240,
+  })
+  @Transform(({ value }) => trimOptionalText(value))
+  @ValidateIf((_object, value) => hasText(value))
+  @IsString()
+  @MaxLength(240)
+  @Matches(/^[\p{L}\p{M}\s,.'’()/-]+$/u, {
+    message: 'Use apenas letras e pontuação comum para cidade e estado.',
+  })
+  companyLocation?: string | null;
+
+  @ApiPropertyOptional({
+    example: 'Distribuidora de materiais para escritório.',
+    nullable: true,
+    maxLength: 2000,
+  })
+  @Transform(({ value }) => trimOptionalText(value))
+  @ValidateIf((_object, value) => hasText(value))
+  @IsString()
+  @MaxLength(2000)
+  companyDescription?: string | null;
 
   @ApiPropertyOptional({
     example: '4500.00',
@@ -112,4 +195,12 @@ export class CreateOpportunityDto {
   @ValidateNested({ each: true })
   @Type(() => OpportunityItemInputDto)
   items?: OpportunityItemInputDto[];
+}
+
+function hasText(value: unknown): boolean {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
+function trimOptionalText(value: unknown): unknown {
+  return typeof value === 'string' ? value.trim() : value;
 }

@@ -37,14 +37,15 @@ import {
   createOpportunity,
   updateOpportunity,
 } from "@/lib/api/opportunity-mutations";
+import { getInternalReturnTo, getOpportunityBackLabel } from "@/lib/navigation";
 import {
-  getInternalReturnTo,
-  getOpportunityBackLabel,
-} from "@/lib/navigation";
-import {
+  ESTIMATED_VALUE_INPUT_PATTERN,
   formatConflictMessage,
   opportunityFormSchema,
   opportunityToFormValues,
+  formatContactPhoneInput,
+  sanitizeContactNameInput,
+  sanitizeLocationInput,
   sanitizeEstimatedValueInput,
   sanitizeQuantityInput,
   toOpportunityPayload,
@@ -74,6 +75,8 @@ export function OpportunityForm({
     mode: "onBlur",
   });
   const estimatedValueField = form.register("estimatedValue");
+  const contactNameField = form.register("contactName");
+  const contactPhoneField = form.register("contactPhone");
   const companyNameLength = useWatch({
     control: form.control,
     name: "companyName",
@@ -81,6 +84,30 @@ export function OpportunityForm({
   const lossReasonLength = useWatch({
     control: form.control,
     name: "lossReason",
+  }).length;
+  const contactNameLength = useWatch({
+    control: form.control,
+    name: "contactName",
+  }).length;
+  const contactPhoneLength = useWatch({
+    control: form.control,
+    name: "contactPhone",
+  }).length;
+  const contactEmailLength = useWatch({
+    control: form.control,
+    name: "contactEmail",
+  }).length;
+  const companyWebsiteLength = useWatch({
+    control: form.control,
+    name: "companyWebsite",
+  }).length;
+  const companyLocationLength = useWatch({
+    control: form.control,
+    name: "companyLocation",
+  }).length;
+  const companyDescriptionLength = useWatch({
+    control: form.control,
+    name: "companyDescription",
   }).length;
   const watchedItems = useWatch({ control: form.control, name: "items" });
   const selectedSalesperson = useWatch({
@@ -247,7 +274,7 @@ export function OpportunityForm({
                 type="text"
                 inputMode="decimal"
                 maxLength={18}
-                pattern="([0-9]{1,12}|[0-9]{1,3}(\\.[0-9]{3}){1,3})(,[0-9]{1,2})?"
+                pattern={ESTIMATED_VALUE_INPUT_PATTERN}
                 placeholder="Ex.: 4500,00"
                 aria-invalid={Boolean(fieldError("estimatedValue"))}
                 {...estimatedValueField}
@@ -346,6 +373,125 @@ export function OpportunityForm({
                 id="lossReason"
                 maxLength={1000}
                 {...form.register("lossReason")}
+              />
+            </Field>
+          </div>
+        </Card>
+
+        <Card className="space-y-4 p-4 sm:p-6">
+          <div>
+            <h2 className="font-semibold">Informações do cliente</h2>
+            <p className="text-muted-foreground mt-1 text-sm">
+              Opcional. Registre apenas o que for útil para acompanhar este
+              cliente.
+            </p>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field
+              id="contactName"
+              label="Pessoa de contato"
+              error={fieldError("contactName")}
+              characterCount={{ current: contactNameLength, max: 160 }}
+            >
+              <Input
+                id="contactName"
+                placeholder="Ex.: Mariana Souza"
+                maxLength={160}
+                aria-invalid={Boolean(fieldError("contactName"))}
+                {...contactNameField}
+                onChange={(event) => {
+                  event.currentTarget.value = sanitizeContactNameInput(
+                    event.currentTarget.value,
+                  );
+                  void contactNameField.onChange(event);
+                }}
+              />
+            </Field>
+            <Field
+              id="contactPhone"
+              label="Telefone / WhatsApp"
+              error={fieldError("contactPhone")}
+              characterCount={{ current: contactPhoneLength, max: 30 }}
+            >
+              <Input
+                id="contactPhone"
+                type="tel"
+                placeholder="Ex.: (11) 99999-0000"
+                maxLength={30}
+                aria-invalid={Boolean(fieldError("contactPhone"))}
+                {...contactPhoneField}
+                onChange={(event) => {
+                  event.currentTarget.value = formatContactPhoneInput(
+                    event.currentTarget.value,
+                  );
+                  void contactPhoneField.onChange(event);
+                }}
+              />
+            </Field>
+            <Field
+              id="contactEmail"
+              label="E-mail de contato"
+              error={fieldError("contactEmail")}
+              characterCount={{ current: contactEmailLength, max: 254 }}
+            >
+              <Input
+                id="contactEmail"
+                type="email"
+                placeholder="Ex.: contato@empresa.com.br"
+                maxLength={254}
+                aria-invalid={Boolean(fieldError("contactEmail"))}
+                {...form.register("contactEmail")}
+              />
+            </Field>
+            <Field
+              id="companyWebsite"
+              label="Site da empresa"
+              error={fieldError("companyWebsite")}
+              hint="Pode informar com ou sem https://."
+              characterCount={{ current: companyWebsiteLength, max: 2048 }}
+            >
+              <Input
+                id="companyWebsite"
+                type="text"
+                inputMode="url"
+                placeholder="Ex.: www.empresa.com.br"
+                maxLength={2048}
+                aria-invalid={Boolean(fieldError("companyWebsite"))}
+                {...form.register("companyWebsite")}
+              />
+            </Field>
+            <Field
+              id="companyLocation"
+              label="Cidade / Estado"
+              error={fieldError("companyLocation")}
+              characterCount={{ current: companyLocationLength, max: 240 }}
+            >
+              <Input
+                id="companyLocation"
+                placeholder="Ex.: São Paulo, SP"
+                maxLength={240}
+                aria-invalid={Boolean(fieldError("companyLocation"))}
+                {...form.register("companyLocation", {
+                  onChange: (event) => {
+                    event.currentTarget.value = sanitizeLocationInput(
+                      event.currentTarget.value,
+                    );
+                  },
+                })}
+              />
+            </Field>
+            <Field
+              id="companyDescription"
+              label="Sobre a empresa"
+              characterCount={{ current: companyDescriptionLength, max: 2000 }}
+              className="sm:col-span-2"
+            >
+              <Textarea
+                id="companyDescription"
+                placeholder="Segmento, produtos, serviços ou observações sobre o negócio."
+                maxLength={2000}
+                rows={3}
+                {...form.register("companyDescription")}
               />
             </Field>
           </div>

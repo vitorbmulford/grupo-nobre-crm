@@ -32,6 +32,27 @@ export class OpportunityResponseDto {
   @ApiProperty({ example: 'Tech Alpha Ltda' })
   companyName!: string;
 
+  @ApiProperty({ example: 'Mariana Souza', nullable: true })
+  contactName!: string | null;
+
+  @ApiProperty({ example: '(11) 99999-0000', nullable: true })
+  contactPhone!: string | null;
+
+  @ApiProperty({ example: 'mariana@empresa.com.br', nullable: true })
+  contactEmail!: string | null;
+
+  @ApiProperty({ example: 'www.empresa.com.br', nullable: true })
+  companyWebsite!: string | null;
+
+  @ApiProperty({ example: 'São Paulo, SP', nullable: true })
+  companyLocation!: string | null;
+
+  @ApiProperty({
+    example: 'Distribuidora de materiais para escritório.',
+    nullable: true,
+  })
+  companyDescription!: string | null;
+
   @ApiProperty({
     enum: [
       'PRIMEIRO_CONTATO',

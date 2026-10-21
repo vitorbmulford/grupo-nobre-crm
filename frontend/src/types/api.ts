@@ -19,6 +19,12 @@ export type Opportunity = {
   id: string;
   code: string;
   companyName: string;
+  contactName: string | null;
+  contactPhone: string | null;
+  contactEmail: string | null;
+  companyWebsite: string | null;
+  companyLocation: string | null;
+  companyDescription: string | null;
   stage: OpportunityStage;
   estimatedValue: string | null;
   lastContactAt: string | null;
