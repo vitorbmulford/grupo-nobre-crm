@@ -28,7 +28,7 @@ npm run format:check
 npm run build
 ```
 
-React Hook Form, Zod, `@hookform/resolvers` e dnd-kit estão instalados como parte da stack planejada. A fundação ainda não implementa formulários comerciais nem drag-and-drop no Kanban.
+React Hook Form, Zod e `@hookform/resolvers` compõem os formulários comerciais de oportunidades. dnd-kit permanece disponível para uma implementação futura do Kanban; drag-and-drop não faz parte desta etapa.
 
 ## Estrutura
 
@@ -70,10 +70,19 @@ O frontend estará em `http://localhost`, servido pelo Nginx. O serviço usa bui
 - `/pipeline` consulta todas as páginas de `GET /api/opportunities` e agrupa as oportunidades pelas seis etapas oficiais. A movimentação Kanban fica para a próxima etapa.
 - `/alerts` consulta alertas abertos em `GET /api/alerts` e mostra estados de carregamento, erro e lista vazia.
 
+### Gestão de oportunidades
+
+- `/opportunities` pesquisa por empresa/código, filtra por etapa e vendedor, ordena pelos campos aceitos pela API e pagina resultados. Cada registro tem ações para abrir, editar ou excluir com confirmação.
+- `/opportunities/new` e `/opportunities/[id]/edit` usam React Hook Form, Zod e os componentes shadcn/Base UI existentes. A edição envia `version`; em HTTP 409, os valores digitados permanecem no formulário e a pessoa escolhe quando carregar a versão atual.
+- `/opportunities/[id]` apresenta os dados comerciais e itens. A exclusão usa o endpoint lógico `DELETE /api/opportunities/:id` e atualiza o cache do TanStack Query.
+- Valores aceitam ponto ou vírgula decimal e são enviados como decimal em string. Datas sem horário permanecem `YYYY-MM-DD`; follow-up é enviado como timestamp ISO com fuso.
+- A API de itens aceita somente nome e quantidade: não há preço unitário, total ou valor por item. O formulário captura o valor estimado no nível da oportunidade, sem inventar campos ou endpoints para valores de itens.
+- A etapa não é editável no formulário porque o backend exige o endpoint de transição para validar as regras do funil e registrar histórico. A interface desta feature não habilita movimentações.
+
 Os contratos preservam dinheiro como string decimal, datas de calendário como `YYYY-MM-DD` e timestamps como instantes ISO com offset. A listagem não usa dados de demonstração. O cliente HTTP centraliza URL, query string, JSON, respostas sem corpo, erros padronizados, status, AbortSignal e falhas de rede. A interface mantém o texto útil enviado pelo backend; erros sem mensagem específica recebem uma mensagem de fallback.
 
 TanStack Query usa cache por chave centralizada, `staleTime` de 30 segundos, uma nova tentativa para consultas e sem retry automático para mutations. React Query Devtools não é necessário para a primeira tela e não foi adicionado.
 
 ## Limitações e próximos passos
 
-Autenticação, CRUD de oportunidades, filtros por etapa/vendedor, consulta detalhada, quadro Kanban com drag-and-drop, histórico, atividades e resolução de alertas não fazem parte desta etapa. A próxima branch recomendada é a interface de oportunidades: filtros comerciais, detalhe e formulário de criação/edição com validação de domínio e concorrência por `version`.
+O backend não fornece campos de preço por item; itens comerciais têm apenas nome e quantidade, com o valor estimado registrado na oportunidade. A etapa é atualizada exclusivamente pela rota de transição do backend. Kanban com drag-and-drop, movimentação de etapas na interface, histórico de transições, timeline de atividades e resolução de alertas ficam para branches posteriores. Autenticação também não faz parte do escopo atual.

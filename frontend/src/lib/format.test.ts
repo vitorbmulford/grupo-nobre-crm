@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { formatCurrency, formatDate, formatDateTime } from "@/lib/format";
+import {
+  formatCurrency,
+  formatDate,
+  formatDateTime,
+  formatNextFollowUp,
+} from "@/lib/format";
 import { STAGES, stageLabel } from "@/lib/constants/stages";
 
 describe("formatCurrency", () => {
@@ -18,6 +23,15 @@ describe("date formatting", () => {
   });
   it("uses an explicit offset for timestamps", () => {
     expect(formatDateTime("2026-10-15T15:30:00-03:00")).toMatch(
+      /15\/10\/2026 às (15:30|18:30)/,
+    );
+  });
+  it("marks a missing return schedule clearly", () => {
+    expect(formatNextFollowUp(null)).toBe("Não agendado");
+    expect(formatNextFollowUp(undefined)).toBe("Não agendado");
+  });
+  it("uses the local timezone and pt-BR date-time layout for a scheduled return", () => {
+    expect(formatNextFollowUp("2026-10-15T15:30:00-03:00")).toMatch(
       /15\/10\/2026 às (15:30|18:30)/,
     );
   });
