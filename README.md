@@ -45,9 +45,18 @@ behavior. Use URL-encoded characters in database credentials if they contain res
 `:`, `/`, or `#`.
 
 The Compose network `app_internal` isolates PostgreSQL and the migration job.
-The backend also joins `app_ingress` so its published HTTP port is reachable
-from the host. A future frontend can join the appropriate network without
-publishing PostgreSQL.
+The backend and frontend join `app_ingress`; PostgreSQL is not exposed to the
+frontend. The browser calls the API through the backend's published host port.
+
+## Frontend
+
+The CRM frontend uses Next.js and is included in the Compose stack. Start the
+full application with `docker compose up --build`; open
+`http://localhost:3000`. For local Next.js development, configure
+`frontend/.env.local` from [`frontend/.env.example`](frontend/.env.example)
+with `NEXT_PUBLIC_API_URL=http://localhost:3001/api`, then run `npm ci` and
+`npm run dev` in `frontend/`. See [`frontend/README.md`](frontend/README.md) for
+the architecture, scripts, data behavior, and current scope.
 
 ## Opportunities and deletion policy
 
