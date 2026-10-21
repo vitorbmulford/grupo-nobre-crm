@@ -28,7 +28,7 @@ npm run format:check
 npm run build
 ```
 
-React Hook Form, Zod e `@hookform/resolvers` compõem os formulários comerciais de oportunidades. dnd-kit permanece disponível para uma implementação futura do Kanban; drag-and-drop não faz parte desta etapa.
+React Hook Form, Zod e `@hookform/resolvers` compõem os formulários comerciais de oportunidades. dnd-kit implementa o drag-and-drop acessível do Kanban; a mesma transição também pode ser solicitada pelo seletor de etapa de cada cartão.
 
 ## Estrutura
 
@@ -73,22 +73,29 @@ O frontend estará em `http://localhost`, servido pelo Nginx. O serviço usa bui
 
 - `/` redireciona para `/opportunities`.
 - `/opportunities` pesquisa por empresa ou código, usa a paginação de `GET /api/opportunities` e apresenta os campos fornecidos pela API.
-- `/pipeline` consulta todas as páginas de `GET /api/opportunities` e agrupa as oportunidades pelas seis etapas oficiais. A movimentação Kanban fica para a próxima etapa.
-- `/alerts` consulta alertas abertos em `GET /api/alerts` e mostra estados de carregamento, erro e lista vazia.
+- `/pipeline` consulta cada uma das seis etapas oficiais separadamente, com filtros por cliente/código e vendedor, carregamento paginado por coluna e opção de ocultar etapas encerradas. Os cartões podem ser movimentados com drag-and-drop ou pelo seletor acessível.
+- `/alerts` lista alertas abertos ou resolvidos, filtra por oportunidade, vendedor, tipo e situação, pagina resultados, agrupa alertas da mesma oportunidade e permite resolução manual. O contador da sidebar acompanha a quantidade de alertas abertos.
 
 ### Gestão de oportunidades
 
 - `/opportunities` pesquisa por empresa/código, filtra por etapa e vendedor, ordena pelos campos aceitos pela API e pagina resultados. Cada registro tem ações para abrir, editar ou excluir com confirmação.
 - `/opportunities/new` e `/opportunities/[id]/edit` usam React Hook Form, Zod e os componentes shadcn/Base UI existentes. A edição envia `version`; em HTTP 409, os valores digitados permanecem no formulário e a pessoa escolhe quando carregar a versão atual.
 - `/opportunities/[id]` apresenta os dados comerciais e itens. A exclusão usa o endpoint lógico `DELETE /api/opportunities/:id` e atualiza o cache do TanStack Query.
+- A tela de detalhes reúne atividades append-only e transições de etapa em ordem cronológica, permite registrar contatos e carrega atividades anteriores sob demanda.
 - Valores aceitam ponto ou vírgula decimal e são enviados como decimal em string. Datas sem horário permanecem `YYYY-MM-DD`; follow-up é enviado como timestamp ISO com fuso.
 - A API de itens aceita somente nome e quantidade: não há preço unitário, total ou valor por item. O formulário captura o valor estimado no nível da oportunidade, sem inventar campos ou endpoints para valores de itens.
-- A etapa não é editável no formulário porque o backend exige o endpoint de transição para validar as regras do funil e registrar histórico. A interface desta feature não habilita movimentações.
+- A etapa não é editável no formulário porque o backend exige o endpoint de transição para validar as regras do funil e registrar histórico. Movimentações acontecem no Pipeline por drag-and-drop ou pelo seletor alternativo.
 
 Os contratos preservam dinheiro como string decimal, datas de calendário como `YYYY-MM-DD` e timestamps como instantes ISO com offset. A listagem não usa dados de demonstração. O cliente HTTP centraliza URL, query string, JSON, respostas sem corpo, erros padronizados, status, AbortSignal e falhas de rede. A interface mantém o texto útil enviado pelo backend; erros sem mensagem específica recebem uma mensagem de fallback.
 
-TanStack Query usa cache por chave centralizada, `staleTime` de 30 segundos, uma nova tentativa para consultas e sem retry automático para mutations. React Query Devtools não é necessário para a primeira tela e não foi adicionado.
+TanStack Query usa chaves centralizadas em `src/lib/api/queries.ts`, `staleTime` de 30 segundos, uma nova tentativa para consultas e sem retry automático para mutations. As mutations invalidam as listas, detalhes, histórico e contador de alertas relacionados; a transição de etapa só atualiza o cartão após confirmação da API. Os prefixos de query existentes permitem que uma futura integração de eventos invalide consultas específicas sem criar uma camada paralela de estado. A branch não usa WebSocket, SSE nem polling geral. Os alertas continuam sendo reconciliados pelo scheduler do backend no intervalo configurado, então uma mudança de oportunidade pode levar até esse intervalo para alterar os alertas persistidos.
+
+## Automação escolhida no case
+
+O case escolheu o **problema 4: organização dos retornos comerciais**. A implementação existente é a automação de alertas de follow-up no backend, exibida e resolvida nesta interface. O scheduler é a autoridade sobre as regras e persistência dos alertas; o frontend não cria alertas nem recalcula riscos. Os tipos, limites, reconhecimento manual e propostas para os problemas 1, 2 e 3 estão descritos em [backend/README.md](../backend/README.md#follow-up-risk-automation).
+
+Foi usada IA para apoiar a leitura dos fluxos, a comparação entre contratos do backend e frontend, a identificação de inconsistências e a atualização desta documentação. As alterações e afirmações deste relatório foram confrontadas com o código e os comandos registrados na auditoria. A inspeção visual foi somente de leitura, em 986 px e tema escuro do sistema, nas rotas de oportunidades, Pipeline, alertas e detalhes; não foram verificados tamanhos de celular nem os outros temas.
 
 ## Limitações e próximos passos
 
-O backend não fornece campos de preço por item; itens comerciais têm apenas nome e quantidade, com o valor estimado registrado na oportunidade. A etapa é atualizada exclusivamente pela rota de transição do backend. Kanban com drag-and-drop, movimentação de etapas na interface, histórico de transições, timeline de atividades e resolução de alertas ficam para branches posteriores. Autenticação também não faz parte do escopo atual.
+O backend não fornece campos de preço por item; itens comerciais têm apenas nome e quantidade, com o valor estimado registrado na oportunidade. A etapa é atualizada exclusivamente pela rota de transição do backend. O frontend ainda não oferece autenticação, atualização em tempo real entre sessões ou alteração manual do estado dos alertas além do endpoint de resolução existente.

@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { QueryClient } from "@tanstack/react-query";
 import {
   opportunityActivitiesQuery,
+  opportunityAlertsQuery,
   opportunityHistoryQuery,
   queryKeys,
 } from "@/lib/api/queries";
@@ -77,5 +78,45 @@ describe("opportunity commercial history queries", () => {
         [],
       ),
     ).toBe(2);
+  });
+
+  it("reads opportunity alerts in bounded pages and continues while more exist", async () => {
+    const response = {
+      data: [],
+      meta: { page: 1, limit: 20, total: 25, totalPages: 2 },
+    };
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(response), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const options = opportunityAlertsQuery("opp-1");
+    await expect(
+      options.queryFn!({
+        client: {} as QueryClient,
+        queryKey: options.queryKey,
+        signal: new AbortController().signal,
+        meta: undefined,
+        pageParam: 1,
+        direction: "forward",
+      }),
+    ).resolves.toEqual(response);
+    expect(String(fetchMock.mock.calls[0][0])).toContain(
+      "/opportunities/opp-1/alerts",
+    );
+    expect(String(fetchMock.mock.calls[0][0])).toContain("page=1");
+    expect(String(fetchMock.mock.calls[0][0])).toContain("limit=20");
+    expect(options.queryKey).toEqual(queryKeys.opportunityAlerts("opp-1"));
+    expect(options.getNextPageParam(response, [], 1, [])).toBe(2);
+    expect(
+      options.getNextPageParam(
+        { ...response, meta: { ...response.meta, page: 2 } },
+        [],
+        2,
+        [],
+      ),
+    ).toBeUndefined();
   });
 });

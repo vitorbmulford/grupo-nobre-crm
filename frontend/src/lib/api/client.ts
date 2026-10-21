@@ -22,6 +22,7 @@ export class ApiError extends Error {
 }
 
 type RequestOptions = Omit<RequestInit, "body"> & { body?: unknown };
+const API_REQUEST_TIMEOUT_MS = 30_000;
 
 function getErrorMessage(body: unknown, status: number) {
   if (body && typeof body === "object" && "message" in body) {
@@ -43,21 +44,42 @@ export async function apiRequest<T>(
   if (options.body !== undefined)
     headers.set("Content-Type", "application/json");
 
+  const controller = new AbortController();
+  let timedOut = false;
+  const forwardAbort = () => controller.abort();
+  if (options.signal?.aborted) controller.abort();
+  else options.signal?.addEventListener("abort", forwardAbort, { once: true });
+  const timeout = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, API_REQUEST_TIMEOUT_MS);
+
   let response: Response;
   try {
     response = await fetch(url, {
       ...options,
       headers,
+      signal: controller.signal,
       body:
         options.body === undefined ? undefined : JSON.stringify(options.body),
     });
   } catch (error) {
+    if (options.signal?.aborted) throw error;
+    if (timedOut)
+      throw new ApiError(
+        0,
+        "A API demorou para responder. Tente novamente.",
+        error,
+      );
     if (error instanceof Error && error.name === "AbortError") throw error;
     throw new ApiError(
       0,
       "Não foi possível conectar à API. Verifique se o serviço está disponível.",
       error,
     );
+  } finally {
+    clearTimeout(timeout);
+    options.signal?.removeEventListener("abort", forwardAbort);
   }
 
   if (response.status === 204 || response.headers.get("content-length") === "0")

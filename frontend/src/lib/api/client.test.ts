@@ -1,7 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { api, apiBaseUrl, ApiError, apiRequest } from "@/lib/api/client";
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.useRealTimers();
+});
 
 describe("HTTP client", () => {
   it("uses the same-origin API path by default", () => {
@@ -60,5 +63,49 @@ describe("HTTP client", () => {
     await expect(api.get("/opportunities")).rejects.toMatchObject({
       status: 0,
     });
+  });
+
+  it("times out stalled requests with a retryable connection message", async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn(
+      (_input: RequestInfo | URL, init?: RequestInit) =>
+        new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener(
+            "abort",
+            () => reject(new DOMException("Aborted", "AbortError")),
+            { once: true },
+          );
+        }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const request = api.get("/opportunities");
+    const assertion = expect(request).rejects.toMatchObject({
+      name: "ApiError",
+      status: 0,
+      message: "A API demorou para responder. Tente novamente.",
+    });
+    await vi.advanceTimersByTimeAsync(30_000);
+    await assertion;
+  });
+
+  it("preserves query cancellation instead of reporting a timeout", async () => {
+    const fetchMock = vi.fn(
+      (_input: RequestInfo | URL, init?: RequestInit) =>
+        new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener(
+            "abort",
+            () => reject(new DOMException("Aborted", "AbortError")),
+            { once: true },
+          );
+        }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const controller = new AbortController();
+    const request = api.get("/opportunities", undefined, controller.signal);
+
+    controller.abort();
+
+    await expect(request).rejects.toMatchObject({ name: "AbortError" });
   });
 });

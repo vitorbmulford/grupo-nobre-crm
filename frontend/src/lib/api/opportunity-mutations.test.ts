@@ -1,11 +1,14 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { QueryClient } from "@tanstack/react-query";
 import { ApiError } from "@/lib/api/client";
 import {
   createOpportunity,
   deleteOpportunity,
+  invalidateAfterOpportunityMutation,
   transitionOpportunityStage,
   updateOpportunity,
 } from "@/lib/api/opportunity-mutations";
+import { queryKeys } from "@/lib/api/queries";
 import type { OpportunityPayload } from "@/lib/opportunity-form";
 
 afterEach(() => vi.unstubAllGlobals());
@@ -119,5 +122,21 @@ describe("opportunity mutations", () => {
     vi.stubGlobal("fetch", fetchMock);
     await expect(deleteOpportunity("opp-1")).resolves.toBeUndefined();
     expect(fetchMock.mock.calls[0][1]).toMatchObject({ method: "DELETE" });
+  });
+
+  it("invalidates opportunity lists and alert queries after commercial changes", async () => {
+    const queryClient = {
+      invalidateQueries: vi.fn().mockResolvedValue(undefined),
+    } as unknown as QueryClient;
+
+    await invalidateAfterOpportunityMutation(queryClient);
+
+    expect(queryClient.invalidateQueries).toHaveBeenCalledTimes(2);
+    expect(queryClient.invalidateQueries).toHaveBeenCalledWith({
+      queryKey: queryKeys.opportunities,
+    });
+    expect(queryClient.invalidateQueries).toHaveBeenCalledWith({
+      queryKey: queryKeys.alerts,
+    });
   });
 });

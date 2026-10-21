@@ -328,6 +328,7 @@ export default function PipelinePage() {
         );
       }
       queryClient.setQueryData(queryKeys.opportunity(updated.id), updated);
+      void queryClient.invalidateQueries({ queryKey: queryKeys.alerts });
       void queryClient.invalidateQueries({
         predicate: (query) => {
           const key = query.queryKey;

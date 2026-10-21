@@ -1,3 +1,5 @@
+import type { QueryClient } from "@tanstack/react-query";
+import { queryKeys } from "@/lib/api/queries";
 import { api } from "@/lib/api/client";
 import type { Opportunity } from "@/types/api";
 import type { OpportunityPayload } from "@/lib/opportunity-form";
@@ -32,4 +34,11 @@ export function transitionOpportunityStage(
 
 export function deleteOpportunity(id: string) {
   return api.delete<void>(`/opportunities/${id}`);
+}
+
+export function invalidateAfterOpportunityMutation(queryClient: QueryClient) {
+  return Promise.all([
+    queryClient.invalidateQueries({ queryKey: queryKeys.opportunities }),
+    queryClient.invalidateQueries({ queryKey: queryKeys.alerts }),
+  ]);
 }
