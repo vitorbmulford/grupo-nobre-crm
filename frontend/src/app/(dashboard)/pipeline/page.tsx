@@ -164,6 +164,7 @@ export default function PipelinePage() {
   const salespeople = useQuery(salespeopleQuery);
   const [searchDraft, setSearchDraft] = useState("");
   const [search, setSearch] = useState("");
+  const [searchUrlReady, setSearchUrlReady] = useState(false);
   const [salespersonId, setSalespersonId] = useState("");
   const [showClosed, setShowClosed] = useState(true);
   const [rulesOpen, setRulesOpen] = useState(false);
@@ -179,6 +180,28 @@ export default function PipelinePage() {
     const timeout = window.setTimeout(() => setSearch(searchDraft.trim()), 250);
     return () => window.clearTimeout(timeout);
   }, [searchDraft]);
+
+  useEffect(() => {
+    const initialSearch = new URLSearchParams(window.location.search)
+      .get("search")
+      ?.trim();
+    const timeout = window.setTimeout(() => {
+      if (initialSearch) {
+        setSearchDraft(initialSearch);
+        setSearch(initialSearch);
+      }
+      setSearchUrlReady(true);
+    }, 0);
+    return () => window.clearTimeout(timeout);
+  }, []);
+
+  useEffect(() => {
+    if (!searchUrlReady) return;
+    const url = new URL(window.location.href);
+    if (search) url.searchParams.set("search", search);
+    else url.searchParams.delete("search");
+    window.history.replaceState(window.history.state, "", url);
+  }, [search, searchUrlReady]);
 
   const stageLimit = (stage: OpportunityStage) =>
     !showClosed && TERMINAL_STAGES.has(stage) ? 1 : PIPELINE_PAGE_SIZE;

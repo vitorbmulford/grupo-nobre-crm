@@ -54,4 +54,18 @@ describe('OpportunitiesService', () => {
       meta: { page: 1, limit: 20, total: 0, totalPages: 0 },
     });
   });
+
+  it('finds accented company names from unaccented search suggestions', async () => {
+    const count = vi.fn().mockResolvedValueOnce(0).mockResolvedValueOnce(1);
+    const prisma = {
+      opportunity: { count, findMany: vi.fn().mockResolvedValue([]) },
+    } as unknown as PrismaService;
+    const service = new OpportunitiesService(prisma);
+
+    await service.list({ search: 'agencia', page: 1, limit: 10 });
+
+    expect(count.mock.calls[1][0].where.OR).toContainEqual({
+      companyName: { contains: 'agência', mode: 'insensitive' },
+    });
+  });
 });

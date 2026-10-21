@@ -28,5 +28,8 @@ export function getOpportunityBackLabel(
   if (returnTo === "/pipeline" || returnTo.startsWith("/pipeline?")) {
     return "Voltar para Pipeline";
   }
+  if (returnTo === "/alerts" || returnTo.startsWith("/alerts?")) {
+    return "Voltar para alertas";
+  }
   return "Voltar para oportunidades";
 }

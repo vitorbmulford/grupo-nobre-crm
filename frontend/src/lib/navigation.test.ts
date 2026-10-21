@@ -23,6 +23,10 @@ describe("opportunity return navigation", () => {
 
   it("labels the actual prior destination", () => {
     expect(getOpportunityBackLabel("/pipeline")).toBe("Voltar para Pipeline");
+    expect(getOpportunityBackLabel("/alerts")).toBe("Voltar para alertas");
+    expect(getOpportunityBackLabel("/alerts?status=OPEN")).toBe(
+      "Voltar para alertas",
+    );
     expect(getOpportunityBackLabel("/opportunities")).toBe(
       "Voltar para oportunidades",
     );
