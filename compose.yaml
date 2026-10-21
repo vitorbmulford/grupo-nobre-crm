@@ -4,6 +4,10 @@ x-backend-build: &backend-build
   context: ./backend
   dockerfile: Dockerfile
 
+x-frontend-build: &frontend-build
+  context: ./frontend
+  dockerfile: Dockerfile
+
 services:
   postgres:
     image: postgres:17
@@ -78,6 +82,30 @@ services:
         - node
         - -e
         - "fetch('http://127.0.0.1:' + process.env.PORT + '/api/health').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))"
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 15s
+
+  frontend:
+    build:
+      <<: *frontend-build
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3001/api}
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${FRONTEND_HOST_PORT:-3000}:3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - app_ingress
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/opportunities').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))"
       interval: 10s
       timeout: 3s
       retries: 5
