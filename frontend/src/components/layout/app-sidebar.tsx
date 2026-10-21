@@ -20,6 +20,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarRail,
+  SidebarSeparator,
   SidebarTrigger,
   useSidebar,
 } from "@/components/ui/sidebar";
@@ -36,7 +37,7 @@ export function AppSidebar() {
   const { state } = useSidebar();
   return (
     <Sidebar collapsible="icon" variant="inset" className="border-r-0">
-      <SidebarHeader className="px-4 pt-5 pb-5 group-data-[collapsible=icon]:px-2">
+      <SidebarHeader className="shrink-0 px-4 pt-4 pb-4 group-data-[collapsible=icon]:px-2">
         <div className="flex items-center justify-between gap-2 group-data-[collapsible=icon]:flex-col group-data-[collapsible=icon]:gap-3">
           <Link
             href="/opportunities"
@@ -62,11 +63,14 @@ export function AppSidebar() {
           />
         </div>
       </SidebarHeader>
-      <SidebarContent>
-        <SidebarGroup>
-          <SidebarGroupLabel>Workspace</SidebarGroupLabel>
+      <SidebarContent className="gap-1 pt-2">
+        <SidebarSeparator className="mb-1 shrink-0" />
+        <SidebarGroup className="gap-1 px-3">
+          <SidebarGroupLabel className="h-7 px-2 text-[11px] font-semibold tracking-[0.12em] uppercase">
+            Navegação
+          </SidebarGroupLabel>
           <SidebarGroupContent>
-            <SidebarMenu>
+            <SidebarMenu className="gap-1.5">
               {links.map(({ href, label, icon: Icon }) => {
                 const active =
                   pathname === href || pathname.startsWith(`${href}/`);
@@ -84,6 +88,7 @@ export function AppSidebar() {
                       }
                       isActive={active}
                       tooltip={label}
+                      className="h-10 rounded-lg px-3 text-[14px] data-active:bg-[#83b735]/10 data-active:font-semibold data-active:text-foreground [&[data-active=true]>svg]:text-[#6e9c2d] dark:data-active:bg-[#83b735]/15 dark:[&[data-active=true]>svg]:text-[#a4d45c] group-data-[collapsible=icon]:size-9! group-data-[collapsible=icon]:p-2!"
                     >
                       <Icon />
                       <span>{label}</span>
@@ -94,12 +99,32 @@ export function AppSidebar() {
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
+        <SidebarSeparator className="mt-1" />
+        <SidebarGroup className="gap-1 px-3 pt-2">
+          <SidebarGroupLabel className="h-7 px-2 text-[11px] font-semibold tracking-[0.12em] uppercase">
+            Preferências
+          </SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <ThemeSelector />
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
       </SidebarContent>
-      <SidebarFooter className="gap-2 px-2 py-3">
-        <ThemeSelector />
-        <p className="text-muted-foreground px-2 text-xs group-data-[collapsible=icon]:hidden">
-          Ambiente comercial
-        </p>
+      <SidebarFooter className="gap-2 px-3 py-3 group-data-[collapsible=icon]:px-2">
+        <div className="bg-muted/45 flex items-center gap-2 rounded-lg border px-3 py-2.5 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-2">
+          <span className="size-2 shrink-0 rounded-full bg-[#83b735] shadow-[0_0_0_3px_rgb(131_183_53_/_12%)]" />
+          <div className="min-w-0 group-data-[collapsible=icon]:hidden">
+            <p className="text-muted-foreground text-[10px] leading-none font-medium tracking-[0.1em] uppercase">
+              Ambiente
+            </p>
+            <p className="mt-1 truncate text-xs leading-none font-medium">
+              Comercial
+            </p>
+          </div>
+        </div>
       </SidebarFooter>
       <SidebarRail />
     </Sidebar>

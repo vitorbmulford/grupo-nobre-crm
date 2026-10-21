@@ -1,5 +1,5 @@
 import { OpportunityForm } from "@/components/opportunities/opportunity-form";
 
 export default function NewOpportunityPage() {
-  return <OpportunityForm />;
+  return <OpportunityForm returnTo="/opportunities" />;
 }

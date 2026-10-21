@@ -189,6 +189,54 @@ describe('Opportunities API (PostgreSQL integration)', () => {
     expect(page.body.data[0].code).toBe(sortedCodes[0]);
   });
 
+  it('paginates a large stage-specific result without dropping filtered opportunities', async () => {
+    const bulkPrefix = `${companyPrefix} Bulk`;
+    await prisma.opportunity.createMany({
+      data: Array.from({ length: 251 }, (_, index) => ({
+        code: `LOAD-${runId.slice(0, 8)}-${String(index).padStart(3, '0')}`,
+        companyName: `${bulkPrefix} ${index}`,
+        stage: 'FOLLOW_UP' as const,
+        estimatedValue: '100.00',
+        salespersonId,
+      })),
+    });
+
+    const pages = await Promise.all(
+      [1, 2, 3].map((page) =>
+        request(app.getHttpServer())
+          .get('/api/opportunities')
+          .query({
+            stage: 'FOLLOW_UP',
+            salespersonId,
+            search: bulkPrefix,
+            page,
+            limit: 100,
+            sortBy: 'code',
+            sortOrder: 'asc',
+          })
+          .expect(200),
+      ),
+    );
+    const records = pages.flatMap((page) => page.body.data);
+
+    expect(pages.map((page) => page.body.meta)).toEqual([
+      { page: 1, limit: 100, total: 251, totalPages: 3 },
+      { page: 2, limit: 100, total: 251, totalPages: 3 },
+      { page: 3, limit: 100, total: 251, totalPages: 3 },
+    ]);
+    expect(records).toHaveLength(251);
+    expect(
+      new Set(records.map((record: { id: string }) => record.id)).size,
+    ).toBe(251);
+    expect(
+      records.every(
+        (record: { stage: string; salespersonId: string }) =>
+          record.stage === 'FOLLOW_UP' &&
+          record.salespersonId === salespersonId,
+      ),
+    ).toBe(true);
+  });
+
   it('returns 404 for an unknown opportunity and updates fields and items with version checks', async () => {
     await request(app.getHttpServer())
       .get(`/api/opportunities/${randomUUID()}`)

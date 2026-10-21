@@ -60,6 +60,7 @@ import {
 import { deleteOpportunity } from "@/lib/api/opportunity-mutations";
 import { updateOpportunity } from "@/lib/api/opportunity-mutations";
 import { STAGES } from "@/lib/constants/stages";
+import { withReturnTo } from "@/lib/navigation";
 import {
   formatCurrency,
   formatDate,
@@ -83,6 +84,11 @@ const SORT_OPTIONS = [
   ["proposalValidUntil", "Validade da proposta"],
   ["customerEventDate", "Data do evento do cliente"],
 ] as const;
+
+const opportunityDetailHref = (id: string) =>
+  withReturnTo(`/opportunities/${id}`, "/opportunities");
+const opportunityEditHref = (id: string) =>
+  withReturnTo(`/opportunities/${id}/edit`, "/opportunities");
 
 function sortHelpText(sortBy: string, sortOrder: "asc" | "desc"): string {
   const ascending = sortOrder === "asc";
@@ -505,7 +511,7 @@ function OpportunityRow({ opportunity }: { opportunity: Opportunity }) {
       <TableRow className="hover:bg-muted/30">
         <TableCell className="px-3 py-4">
           <Link
-            href={`/opportunities/${opportunity.id}`}
+            href={opportunityDetailHref(opportunity.id)}
             className="font-medium hover:underline"
           >
             {opportunity.companyName}
@@ -541,7 +547,7 @@ function OpportunityRow({ opportunity }: { opportunity: Opportunity }) {
               variant="ghost"
               aria-label={`Abrir ${opportunity.code}`}
               nativeButton={false}
-              render={<Link href={`/opportunities/${opportunity.id}`} />}
+              render={<Link href={opportunityDetailHref(opportunity.id)} />}
             >
               <Eye className="size-4" />
             </Button>
@@ -551,7 +557,7 @@ function OpportunityRow({ opportunity }: { opportunity: Opportunity }) {
               className="border-border border-l rounded-l-none"
               aria-label={`Editar ${opportunity.code}`}
               nativeButton={false}
-              render={<Link href={`/opportunities/${opportunity.id}/edit`} />}
+              render={<Link href={opportunityEditHref(opportunity.id)} />}
             >
               <Pencil className="size-4" />
             </Button>
@@ -622,7 +628,7 @@ function OpportunityCard({ opportunity }: { opportunity: Opportunity }) {
         <div>
           <p className="text-muted-foreground text-xs">{opportunity.code}</p>
           <Link
-            href={`/opportunities/${opportunity.id}`}
+            href={opportunityDetailHref(opportunity.id)}
             className="mt-0.5 block font-medium hover:underline"
           >
             {opportunity.companyName}
@@ -655,7 +661,7 @@ function OpportunityCard({ opportunity }: { opportunity: Opportunity }) {
           size="sm"
           variant="outline"
           nativeButton={false}
-          render={<Link href={`/opportunities/${opportunity.id}`} />}
+          render={<Link href={opportunityDetailHref(opportunity.id)} />}
         >
           <Eye className="mr-1 size-4" />
           Abrir
@@ -664,7 +670,7 @@ function OpportunityCard({ opportunity }: { opportunity: Opportunity }) {
           size="sm"
           variant="outline"
           nativeButton={false}
-          render={<Link href={`/opportunities/${opportunity.id}/edit`} />}
+          render={<Link href={opportunityEditHref(opportunity.id)} />}
         >
           <Pencil className="mr-1 size-4" />
           Editar

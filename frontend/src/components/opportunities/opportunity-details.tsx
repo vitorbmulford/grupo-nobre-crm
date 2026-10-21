@@ -28,15 +28,32 @@ import { StageBadge } from "@/components/shared/stage-badge";
 import { opportunityQuery, queryKeys } from "@/lib/api/queries";
 import { deleteOpportunity } from "@/lib/api/opportunity-mutations";
 import {
+  getInternalReturnTo,
+  getOpportunityBackLabel,
+  withReturnTo,
+} from "@/lib/navigation";
+import {
   formatCurrency,
   formatDate,
   formatDateTime,
   formatNextFollowUp,
 } from "@/lib/format";
 
-export function OpportunityDetails({ id }: { id: string }) {
+export function OpportunityDetails({
+  id,
+  returnTo: requestedReturnTo,
+}: {
+  id: string;
+  returnTo?: string;
+}) {
   const router = useRouter();
   const queryClient = useQueryClient();
+  const returnTo = getInternalReturnTo(requestedReturnTo);
+  const backLabel = getOpportunityBackLabel(returnTo);
+  const editHref = withReturnTo(
+    `/opportunities/${id}/edit`,
+    `/opportunities/${id}?returnTo=${encodeURIComponent(returnTo)}`,
+  );
   const [confirmDelete, setConfirmDelete] = useState(false);
   const query = useQuery(opportunityQuery(id));
   const deletion = useMutation({
@@ -60,14 +77,14 @@ export function OpportunityDetails({ id }: { id: string }) {
   if (query.isPending)
     return (
       <>
-        <BackLink href="/opportunities" label="Voltar para oportunidades" />
+        <BackLink href={returnTo} label={backLabel} />
         <LoadingState label="Carregando oportunidade…" />
       </>
     );
   if (query.isError)
     return (
       <>
-        <BackLink href="/opportunities" label="Voltar para oportunidades" />
+        <BackLink href={returnTo} label={backLabel} />
         <ErrorState
           message={query.error.message}
           onRetry={() => void query.refetch()}
@@ -80,7 +97,10 @@ export function OpportunityDetails({ id }: { id: string }) {
 
   return (
     <>
-      <BackLink href="/opportunities" label="Voltar para oportunidades" />
+      <BackLink
+        href={returnTo}
+        label={getOpportunityBackLabel(returnTo, query.data.companyName)}
+      />
       <header className="mb-5 flex flex-col gap-4 border-b pb-5 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
           <p className="text-primary mb-1 text-xs font-semibold tracking-[0.16em] uppercase">
@@ -103,7 +123,7 @@ export function OpportunityDetails({ id }: { id: string }) {
           <Button
             variant="outline"
             nativeButton={false}
-            render={<Link href={`/opportunities/${id}/edit`} />}
+            render={<Link href={editHref} />}
           >
             <Pencil className="mr-2 size-4" />
             Editar
@@ -157,7 +177,9 @@ export function OpportunityDetails({ id }: { id: string }) {
                 size="sm"
                 variant="outline"
                 nativeButton={false}
-                render={<Link href={`/opportunities/${id}/edit#nextFollowUpAt`} />}
+                render={
+                  <Link href={`${editHref}#nextFollowUpAt`} />
+                }
               >
                 Agendar retorno
               </Button>

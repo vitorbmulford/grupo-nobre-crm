@@ -3,6 +3,7 @@ import { ApiError } from "@/lib/api/client";
 import {
   createOpportunity,
   deleteOpportunity,
+  transitionOpportunityStage,
   updateOpportunity,
 } from "@/lib/api/opportunity-mutations";
 import type { OpportunityPayload } from "@/lib/opportunity-form";
@@ -57,6 +58,53 @@ describe("opportunity mutations", () => {
     expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toMatchObject({
       ...payload,
       version: 7,
+    });
+  });
+
+  it("moves to a valid stage with the returned version", async () => {
+    const response = { id: "opp-1", stage: "FOLLOW_UP", version: 4 };
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(response), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      transitionOpportunityStage("opp-1", "FOLLOW_UP", 3),
+    ).resolves.toEqual(response);
+    expect(String(fetchMock.mock.calls[0][0])).toContain(
+      "/opportunities/opp-1/stage",
+    );
+    expect(fetchMock.mock.calls[0][1].method).toBe("PATCH");
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({
+      toStage: "FOLLOW_UP",
+      version: 3,
+    });
+  });
+
+  it("sends a trimmed justification and preserves conflict responses", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            statusCode: 409,
+            message: "Opportunity version is stale",
+          }),
+          { status: 409, headers: { "content-type": "application/json" } },
+        ),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      transitionOpportunityStage("opp-1", "PERDIDA", 8, "  Sem prazo  "),
+    ).rejects.toMatchObject({ name: "ApiError", status: 409 });
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({
+      toStage: "PERDIDA",
+      version: 8,
+      reason: "Sem prazo",
     });
   });
 

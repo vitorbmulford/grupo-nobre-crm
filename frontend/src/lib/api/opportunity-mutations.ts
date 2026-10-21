@@ -17,6 +17,19 @@ export function updateOpportunity(
   });
 }
 
+export function transitionOpportunityStage(
+  id: string,
+  toStage: Opportunity["stage"],
+  version: number,
+  reason?: string,
+) {
+  return api.patch<Opportunity>(`/opportunities/${id}/stage`, {
+    toStage,
+    version,
+    ...(reason?.trim() ? { reason: reason.trim() } : {}),
+  });
+}
+
 export function deleteOpportunity(id: string) {
   return api.delete<void>(`/opportunities/${id}`);
 }
