@@ -88,9 +88,29 @@ cp .env.example .env
 docker compose up --build -d
 ```
 
-No Compose, acesse `http://localhost` (porta 80 por padrão). A porta 3000 é interna ao container do frontend: o navegador acessa o Next.js pelo Nginx, que também encaminha `/api` ao backend. Se a porta 80 estiver ocupada, defina `HTTP_HOST_PORT=8080` no `.env` e abra `http://localhost:8080`. Swagger fica em `/api/docs` e a saúde da API em `/api/health`. O volume nomeado `postgres_data` mantém os dados entre reinicializações; `docker compose stop` para os serviços sem remover o volume. Consulte [backend/README.md](backend/README.md#environment) para variáveis e [frontend/README.md](frontend/README.md) para detalhes do cliente.
+### Endereços e código
 
-Para desenvolvimento local sem Docker, disponibilize um PostgreSQL acessível pelo host e configure `DATABASE_URL` no `.env` da raiz. Execute migrations e seed em `backend/`, inicie a API com `npm run start:dev` e, em outro terminal, copie `frontend/.env.example` para `.env.local` e rode `npm run dev`. Nesse modo, o frontend usa `http://localhost:3000` e a API `http://localhost:3002`; configure `NEXT_PUBLIC_REALTIME_URL=http://localhost:3002` e `CORS_ORIGINS` conforme o README de cada serviço.
+Depois que os serviços estiverem saudáveis, use estes links:
+
+| Serviço | Acesso local | Código e instruções |
+| --- | --- | --- |
+| Frontend — CRM | [Abrir o CRM](http://localhost) | [Pasta `frontend/`](frontend/) · [README do frontend](frontend/README.md) |
+| Backend — Swagger da API | [Abrir o Swagger](http://localhost/api/docs) | [Pasta `backend/`](backend/) · [README do backend](backend/README.md) |
+| Saúde da API | [Abrir healthcheck](http://localhost/api/health) | Endpoint do backend |
+
+No Compose, o navegador acessa o frontend pelo Nginx na porta 80. A porta 3000 do Next.js e a porta 3001 do NestJS são internas à rede Docker; a API é encaminhada pelo mesmo domínio no caminho `/api`. Se a porta 80 estiver ocupada, defina `HTTP_HOST_PORT=8080` no `.env` e troque `localhost` por `localhost:8080` nos links acima. O volume `postgres_data` preserva os dados; `docker compose stop` para os serviços sem removê-lo. As variáveis estão em [backend/README.md](backend/README.md#environment).
+
+### Desenvolvimento local sem Docker
+
+Disponibilize um PostgreSQL acessível pelo host e configure `DATABASE_URL` no `.env` da raiz. Aplique as migrations e o seed do backend, depois inicie cada serviço em um terminal separado. Consulte os READMEs do [backend](backend/README.md) e do [frontend](frontend/README.md) para os comandos completos e variáveis.
+
+| Serviço | Endereço local |
+| --- | --- |
+| Frontend — CRM | [http://localhost:3000](http://localhost:3000) |
+| Backend — Swagger | [http://localhost:3002/api/docs](http://localhost:3002/api/docs) |
+| Saúde da API | [http://localhost:3002/api/health](http://localhost:3002/api/health) |
+
+Para Socket.IO nesse modo, configure `NEXT_PUBLIC_REALTIME_URL=http://localhost:3002` e permita `http://localhost:3000` em `CORS_ORIGINS`.
 
 ## Demonstração da automação
 
