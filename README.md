@@ -88,7 +88,7 @@ cp .env.example .env
 docker compose up --build -d
 ```
 
-Acesse `http://localhost`; Swagger em `http://localhost/api/docs` e saúde da API em `http://localhost/api/health`. `HTTP_HOST_PORT` altera a porta publicada pelo Nginx. O volume nomeado `postgres_data` mantém os dados entre reinicializações; `docker compose stop` para os serviços sem remover o volume. Consulte [backend/README.md](backend/README.md#environment) para variáveis e [frontend/README.md](frontend/README.md) para detalhes do cliente.
+No Compose, acesse `http://localhost` (porta 80 por padrão). A porta 3000 é interna ao container do frontend: o navegador acessa o Next.js pelo Nginx, que também encaminha `/api` ao backend. Se a porta 80 estiver ocupada, defina `HTTP_HOST_PORT=8080` no `.env` e abra `http://localhost:8080`. Swagger fica em `/api/docs` e a saúde da API em `/api/health`. O volume nomeado `postgres_data` mantém os dados entre reinicializações; `docker compose stop` para os serviços sem remover o volume. Consulte [backend/README.md](backend/README.md#environment) para variáveis e [frontend/README.md](frontend/README.md) para detalhes do cliente.
 
 Para desenvolvimento local sem Docker, disponibilize um PostgreSQL acessível pelo host e configure `DATABASE_URL` no `.env` da raiz. Execute migrations e seed em `backend/`, inicie a API com `npm run start:dev` e, em outro terminal, copie `frontend/.env.example` para `.env.local` e rode `npm run dev`. Nesse modo, o frontend usa `http://localhost:3000` e a API `http://localhost:3002`; configure `NEXT_PUBLIC_REALTIME_URL=http://localhost:3002` e `CORS_ORIGINS` conforme o README de cada serviço.
 
