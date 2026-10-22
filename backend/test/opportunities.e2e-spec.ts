@@ -10,6 +10,7 @@ import { AppModule } from '../src/app.module.js';
 import { PrismaService } from '../src/prisma/prisma.service.js';
 import { configureHttp } from '../src/http/configure-http.js';
 import { AlertsService } from '../src/alerts/alerts.service.js';
+import { FollowUpSchedulerService } from '../src/alerts/follow-up-scheduler.service.js';
 
 describe('Opportunities API (PostgreSQL integration)', () => {
   let app: INestApplication<App>;
@@ -23,7 +24,10 @@ describe('Opportunities API (PostgreSQL integration)', () => {
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
-    }).compile();
+    })
+      .overrideProvider(FollowUpSchedulerService)
+      .useValue({})
+      .compile();
     app = moduleFixture.createNestApplication();
     app.useLogger(app.get(Logger));
     app.setGlobalPrefix('api');
@@ -292,8 +296,8 @@ describe('Opportunities API (PostgreSQL integration)', () => {
     expect(page.body.meta).toEqual({
       page: 1,
       limit: 1,
-      total: 4,
-      totalPages: 4,
+      total: 5,
+      totalPages: 5,
     });
     expect(page.body.data).toHaveLength(1);
     const sortedCodes = (

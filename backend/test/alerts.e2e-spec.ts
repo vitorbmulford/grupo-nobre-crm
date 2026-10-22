@@ -9,6 +9,7 @@ import { AppModule } from '../src/app.module.js';
 import { configureHttp } from '../src/http/configure-http.js';
 import { PrismaService } from '../src/prisma/prisma.service.js';
 import { AlertsService } from '../src/alerts/alerts.service.js';
+import { FollowUpSchedulerService } from '../src/alerts/follow-up-scheduler.service.js';
 
 describe('Follow-up alerts API and reconciliation (PostgreSQL integration)', () => {
   let app: INestApplication<App>;
@@ -21,7 +22,12 @@ describe('Follow-up alerts API and reconciliation (PostgreSQL integration)', () 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
-    }).compile();
+    })
+      // These integration scenarios use fixed evaluation instants. Keep the
+      // production startup scheduler from racing their explicit evaluations.
+      .overrideProvider(FollowUpSchedulerService)
+      .useValue({})
+      .compile();
     app = moduleFixture.createNestApplication();
     app.useLogger(app.get(Logger));
     app.setGlobalPrefix('api');

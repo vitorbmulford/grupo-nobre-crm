@@ -8,6 +8,7 @@ import { App } from 'supertest/types.js';
 import { AppModule } from '../src/app.module.js';
 import { configureHttp } from '../src/http/configure-http.js';
 import { PrismaService } from '../src/prisma/prisma.service.js';
+import { FollowUpSchedulerService } from '../src/alerts/follow-up-scheduler.service.js';
 
 describe('Activities API (PostgreSQL integration)', () => {
   let app: INestApplication<App>;
@@ -18,7 +19,10 @@ describe('Activities API (PostgreSQL integration)', () => {
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
-    }).compile();
+    })
+      .overrideProvider(FollowUpSchedulerService)
+      .useValue({})
+      .compile();
     app = moduleFixture.createNestApplication();
     app.useLogger(app.get(Logger));
     app.setGlobalPrefix('api');
