@@ -120,4 +120,4 @@ Foi usada IA para apoiar a leitura dos fluxos, a comparação entre contratos do
 
 ## Limitações e próximos passos
 
-O backend não fornece campos de preço por item; itens comerciais têm apenas nome e quantidade, com o valor estimado registrado na oportunidade. A etapa é atualizada exclusivamente pela rota de transição do backend. O frontend ainda não oferece autenticação, atualização em tempo real entre sessões ou alteração manual do estado dos alertas além do endpoint de resolução existente.
+O backend não fornece campos de preço por item; itens comerciais têm apenas nome e quantidade, com o valor estimado registrado na oportunidade. A etapa é atualizada exclusivamente pela rota de transição do backend. O frontend não oferece autenticação. A sincronização Socket.IO é global e não isolada por vendedor; a resolução manual de alertas está disponível pela interface.

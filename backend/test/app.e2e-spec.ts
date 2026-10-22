@@ -4,6 +4,7 @@ import request from 'supertest';
 import { App } from 'supertest/types.js';
 import { AppModule } from './../src/app.module.js';
 import { PrismaService } from '../src/prisma/prisma.service.js';
+import { FollowUpSchedulerService } from '../src/alerts/follow-up-scheduler.service.js';
 import { configureHttp } from '../src/http/configure-http.js';
 import { ConfigService } from '@nestjs/config';
 import { Logger, PinoLogger } from 'nestjs-pino';
@@ -22,6 +23,8 @@ describe('AppController (e2e)', () => {
     })
       .overrideProvider(PrismaService)
       .useValue(prismaService)
+      .overrideProvider(FollowUpSchedulerService)
+      .useValue({})
       .compile();
 
     app = moduleFixture.createNestApplication();

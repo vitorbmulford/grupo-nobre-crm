@@ -13,19 +13,19 @@ Start the full Docker stack:
 docker compose up --build
 ```
 
-To run Nest on the host while PostgreSQL runs in Docker, start only the
-database and migrations, then start Nest in another terminal:
+To run Nest on the host, use a PostgreSQL instance reachable from the host and
+set its connection string in the root `.env` as `DATABASE_URL`. PostgreSQL in
+the default Compose configuration is on a private network and is not published
+to the host, so it cannot be used directly by a host-based Nest process. Then
+start Nest:
 
 ```bash
-docker compose up -d postgres migrate
 cd backend && npm run start:dev
 ```
 
 The host-based API listens on `http://localhost:3002` by default; set
 `LOCAL_PORT` to use another port. The Docker API is internal to the Compose
 network and is reached through the Nginx origin at `http://localhost/api`.
-PostgreSQL in Compose is not published to the host; host-based Nest development
-needs a PostgreSQL instance accessible to the host and a matching `DATABASE_URL`.
 
 The Docker API is routed through Nginx. Swagger UI is at
 `http://localhost/api/docs`, and readiness is checked at
@@ -91,21 +91,21 @@ an internal URL using the `POSTGRES_*` values and the `postgres` service name.
 Keep the password and database settings in both values aligned when changing
 the defaults. The Compose source variables are:
 
-| Variable | Purpose |
-| --- | --- |
-| `NODE_ENV` | Runtime mode (`development`, `test`, or `production`) |
-| `PORT` | API listen port inside the container |
-| `LOG_LEVEL` | Pino threshold |
-| `CORS_ORIGINS` | Exact comma-separated browser origin allowlist |
-| `FOLLOW_UP_EVALUATION_INTERVAL_MS` | Automation interval in milliseconds (default 900000) |
-| `FOLLOW_UP_STALE_CONTACT_DAYS` | Inactivity window in UTC calendar days (default 7) |
-| `FOLLOW_UP_CUSTOMER_EVENT_WINDOW_DAYS` | Customer event window in calendar days (default 7) |
-| `POSTGRES_HOST` | Compose hostname used to construct the connection URL |
-| `POSTGRES_PORT` | PostgreSQL port inside the Compose network |
-| `POSTGRES_DB` | PostgreSQL database name |
-| `POSTGRES_USER` | PostgreSQL username |
-| `POSTGRES_PASSWORD` | Local PostgreSQL password |
-| `HTTP_HOST_PORT` | Host port published by Nginx (default `80`) |
+| Variable                               | Purpose                                               |
+| -------------------------------------- | ----------------------------------------------------- |
+| `NODE_ENV`                             | Runtime mode (`development`, `test`, or `production`) |
+| `PORT`                                 | API listen port inside the container                  |
+| `LOG_LEVEL`                            | Pino threshold                                        |
+| `CORS_ORIGINS`                         | Exact comma-separated browser origin allowlist        |
+| `FOLLOW_UP_EVALUATION_INTERVAL_MS`     | Automation interval in milliseconds (default 900000)  |
+| `FOLLOW_UP_STALE_CONTACT_DAYS`         | Inactivity window in UTC calendar days (default 7)    |
+| `FOLLOW_UP_CUSTOMER_EVENT_WINDOW_DAYS` | Customer event window in calendar days (default 7)    |
+| `POSTGRES_HOST`                        | Compose hostname used to construct the connection URL |
+| `POSTGRES_PORT`                        | PostgreSQL port inside the Compose network            |
+| `POSTGRES_DB`                          | PostgreSQL database name                              |
+| `POSTGRES_USER`                        | PostgreSQL username                                   |
+| `POSTGRES_PASSWORD`                    | Local PostgreSQL password                             |
+| `HTTP_HOST_PORT`                       | Host port published by Nginx (default `80`)           |
 
 Compose constructs the backend's container `DATABASE_URL` from `POSTGRES_*`.
 The host-based Nest process loads `DATABASE_URL` from the root `.env` file.
@@ -122,20 +122,20 @@ constraints, lookup indexes, and a database sequence for generated commercial
 codes. PostgreSQL stores money as `DECIMAL(14,2)`, and the API sends it as a
 decimal string.
 
-| Method and path | Behavior |
-| --- | --- |
-| `GET /api/opportunities` | Search code/company and filter by stage or salesperson; sort and paginate. |
-| `GET /api/opportunities/:id` | Return an active opportunity with its items and salesperson. |
-| `POST /api/opportunities` | Create in `PRIMEIRO_CONTATO`; the server assigns its code. |
-| `PATCH /api/opportunities/:id` | Update commercial fields; include the current `version`. If `items` is sent, it replaces the current item list in the same transaction. |
-| `PATCH /api/opportunities/:id/stage` | Move the opportunity through the validated pipeline and append one history row in the same PostgreSQL transaction. |
-| `GET /api/opportunities/:id/history` | Return registered stage movements in chronological order. |
-| `DELETE /api/opportunities/:id` | Set `deletedAt`; repeated requests keep the original timestamp. |
-| `GET /api/salespeople` | List available salespeople. |
+| Method and path                      | Behavior                                                                                                                                |
+| ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /api/opportunities`             | Search code/company and filter by stage or salesperson; sort and paginate.                                                              |
+| `GET /api/opportunities/:id`         | Return an active opportunity with its items and salesperson.                                                                            |
+| `POST /api/opportunities`            | Create in `PRIMEIRO_CONTATO`; the server assigns its code.                                                                              |
+| `PATCH /api/opportunities/:id`       | Update commercial fields; include the current `version`. If `items` is sent, it replaces the current item list in the same transaction. |
+| `PATCH /api/opportunities/:id/stage` | Move the opportunity through the validated pipeline and append one history row in the same PostgreSQL transaction.                      |
+| `GET /api/opportunities/:id/history` | Return registered stage movements in chronological order.                                                                               |
+| `DELETE /api/opportunities/:id`      | Set `deletedAt`; repeated requests keep the original timestamp.                                                                         |
+| `GET /api/salespeople`               | List available salespeople.                                                                                                             |
 
 Swagger UI is available at `/api/docs`. Unknown request properties are rejected,
-so `stage` cannot be changed through create or patch. The next branch should add
-the dedicated transition endpoint before enabling stage updates.
+so `stage` cannot be changed through create or patch. Stage changes use the
+dedicated transition endpoint documented below.
 
 ### Logical deletion
 
@@ -184,14 +184,14 @@ by the dedicated stage endpoint; the generic opportunity PATCH rejects `stage`.
 
 Active stages advance one step at a time:
 
-| From | Allowed destination | Rule |
-| --- | --- | --- |
-| `PRIMEIRO_CONTATO` | `APRESENTACAO_ORCAMENTO` | Requires a non-null estimated value and at least one persisted item with positive quantity. |
-| `APRESENTACAO_ORCAMENTO` | `FOLLOW_UP` | Sequential advance. |
-| `FOLLOW_UP` | `FORECAST` | Sequential advance. |
-| `FORECAST` | `FECHAMENTO` | Closing is only allowed from Forecast. |
-| Any active stage | `PERDIDA` | Requires a non-empty loss reason after trimming; saved on the opportunity and transition. |
-| Any active stage after the first | Previous active stage | One-step backward movement requires a non-empty reason, saved in transition history. |
+| From                             | Allowed destination      | Rule                                                                                        |
+| -------------------------------- | ------------------------ | ------------------------------------------------------------------------------------------- |
+| `PRIMEIRO_CONTATO`               | `APRESENTACAO_ORCAMENTO` | Requires a non-null estimated value and at least one persisted item with positive quantity. |
+| `APRESENTACAO_ORCAMENTO`         | `FOLLOW_UP`              | Sequential advance.                                                                         |
+| `FOLLOW_UP`                      | `FORECAST`               | Sequential advance.                                                                         |
+| `FORECAST`                       | `FECHAMENTO`             | Closing is only allowed from Forecast.                                                      |
+| Any active stage                 | `PERDIDA`                | Requires a non-empty loss reason after trimming; saved on the opportunity and transition.   |
+| Any active stage after the first | Previous active stage    | One-step backward movement requires a non-empty reason, saved in transition history.        |
 
 `FECHAMENTO` and `PERDIDA` are terminal. No same-stage movement or stage jump
 is accepted. These backward rules are the project's complementary choice: the
@@ -223,13 +223,13 @@ includes `statusCode`, `error`, `message`, `correlationId`, `timestamp`, and
 
 Examples of the standard error response messages:
 
-| Status | Example `message` | Example cause |
-| --- | --- | --- |
-| 400 | `Validation failed` | Unknown `stage` sent to the generic PATCH, or invalid/missing `version`. |
-| 404 | `Opportunity not found` | ID does not exist or the opportunity is soft-deleted. |
-| 409 | `Opportunity version is stale` | Another update already used the submitted version. |
-| 422 | `An estimated value is required` | Entering budget presentation with a persisted null value. |
-| 422 | `A loss reason is required` | Moving to Lost without a non-blank reason. |
+| Status | Example `message`                | Example cause                                                            |
+| ------ | -------------------------------- | ------------------------------------------------------------------------ |
+| 400    | `Validation failed`              | Unknown `stage` sent to the generic PATCH, or invalid/missing `version`. |
+| 404    | `Opportunity not found`          | ID does not exist or the opportunity is soft-deleted.                    |
+| 409    | `Opportunity version is stale`   | Another update already used the submitted version.                       |
+| 422    | `An estimated value is required` | Entering budget presentation with a persisted null value.                |
+| 422    | `A loss reason is required`      | Moving to Lost without a non-blank reason.                               |
 
 The API reads the current persisted stage and item/value data before applying
 the policy. A compare-and-set update conditioned on the supplied `version`
@@ -268,10 +268,10 @@ The supported types are `CALL`, `EMAIL`, `MEETING`, `WHATSAPP`, and `OTHER`. Eac
 
 Activity timestamps and scheduled `nextFollowUpAt` values must include `Z` or an explicit UTC offset, so the API interprets them as stable instants regardless of the host timezone.
 
-| Method and path | Behavior |
-| --- | --- |
-| `POST /api/opportunities/:id/activities` | Register a completed interaction; rejects missing/deleted opportunities and future timestamps. |
-| `GET /api/opportunities/:id/activities` | List activity records for an active opportunity, newest first; accepts `type`, `page`, and `limit`. |
+| Method and path                          | Behavior                                                                                            |
+| ---------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| `POST /api/opportunities/:id/activities` | Register a completed interaction; rejects missing/deleted opportunities and future timestamps.      |
+| `GET /api/opportunities/:id/activities`  | List activity records for an active opportunity, newest first; accepts `type`, `page`, and `limit`. |
 
 Both collection responses include pagination metadata (`page`, `limit`, `total`, `totalPages`). Ordering is `occurredAt DESC, id ASC`, making tied timestamps stable. List responses remain scoped to the requested opportunity and never include stage transitions.
 
@@ -283,19 +283,19 @@ Activities update `lastContactAt`; the follow-up risk automation below uses that
 
 The selected case automation is preventing forgotten follow-ups. It directly
 addresses the case's fourth operational problem: helping salespeople organize
-returns when contact volume is high. Alerts are private CRM records for a future
-interface; they do not send email, WhatsApp, SMS, push messages, or other
+returns when contact volume is high. Alerts are CRM records displayed in the
+frontend; they do not send email, WhatsApp, SMS, push messages, or other
 customer communications.
 
 `@nestjs/schedule` evaluates active opportunities at backend startup and every
 15 minutes by default.
 The interval and date windows can be configured in the environment:
 
-| Variable | Default | Meaning |
-| --- | ---: | --- |
-| `FOLLOW_UP_EVALUATION_INTERVAL_MS` | `900000` | Evaluation interval in milliseconds; minimum 1 second. |
-| `FOLLOW_UP_STALE_CONTACT_DAYS` | `7` | A contact is stale only after more than this many UTC calendar days. |
-| `FOLLOW_UP_CUSTOMER_EVENT_WINDOW_DAYS` | `7` | Include events today through this many UTC calendar days ahead. |
+| Variable                               |  Default | Meaning                                                              |
+| -------------------------------------- | -------: | -------------------------------------------------------------------- |
+| `FOLLOW_UP_EVALUATION_INTERVAL_MS`     | `900000` | Evaluation interval in milliseconds; minimum 1 second.               |
+| `FOLLOW_UP_STALE_CONTACT_DAYS`         |      `7` | A contact is stale only after more than this many UTC calendar days. |
+| `FOLLOW_UP_CUSTOMER_EVENT_WINDOW_DAYS` |      `7` | Include events today through this many UTC calendar days ahead.      |
 
 The pure risk policy receives an explicit evaluation instant. PostgreSQL `DATE`
 fields (`lastContactAt`, `proposalValidUntil`, and `customerEventDate`) are
@@ -306,12 +306,12 @@ the evaluation time.
 The rules are independent, so an opportunity may have several different open
 alerts:
 
-| Type | Rule |
-| --- | --- |
-| `FOLLOW_UP_OVERDUE` | `nextFollowUpAt` is set and at or before the evaluation instant. |
-| `CONTACT_STALE` | No return is scheduled, `lastContactAt` is set, and it is more than 7 calendar days old by default. A null contact date is unknown; the system does not invent one or issue this alert. |
-| `PROPOSAL_EXPIRED` | `proposalValidUntil` is set and earlier than the evaluation date. |
-| `CUSTOMER_EVENT_NEAR` | `customerEventDate` is today through the next 7 calendar days; past events and null dates are ignored. |
+| Type                  | Rule                                                                                                                                                                                    |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `FOLLOW_UP_OVERDUE`   | `nextFollowUpAt` is set and at or before the evaluation instant.                                                                                                                        |
+| `CONTACT_STALE`       | No return is scheduled, `lastContactAt` is set, and it is more than 7 calendar days old by default. A null contact date is unknown; the system does not invent one or issue this alert. |
+| `PROPOSAL_EXPIRED`    | `proposalValidUntil` is set and earlier than the evaluation date.                                                                                                                       |
+| `CUSTOMER_EVENT_NEAR` | `customerEventDate` is today through the next 7 calendar days; past events and null dates are ignored.                                                                                  |
 
 Only `PRIMEIRO_CONTATO`, `APRESENTACAO_ORCAMENTO`, `FOLLOW_UP`, and `FORECAST`
 are eligible. `FECHAMENTO`, `PERDIDA`, and soft-deleted opportunities receive
@@ -343,11 +343,11 @@ constraint keeps open alerts unique; this setup targets a simple deployment.
 
 ### Alert endpoints
 
-| Method and path | Behavior |
-| --- | --- |
-| `GET /api/alerts` | List open alerts by default; accepts `status`, `type`, `opportunityId`, `page`, and `limit`. Set `status=RESOLVED` to inspect history. |
+| Method and path                                | Behavior                                                                                                                                                                                                                                                                                                  |
+| ---------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /api/alerts`                              | List open alerts by default; accepts `status`, `type`, `opportunityId`, `page`, and `limit`. Set `status=RESOLVED` to inspect history.                                                                                                                                                                    |
 | `GET /api/opportunities/:opportunityId/alerts` | List all alert history for an active opportunity; `opportunityId` is the alert response's `opportunityId` (or nested `opportunity.id`), never the alert's own `id`. Supports `status`, `type`, and pagination; the path already scopes the opportunity. Soft-deleted or missing opportunities return 404. |
-| `PATCH /api/alerts/:alertId/resolve` | Resolve and acknowledge an open alert; `alertId` is the alert response's `id`, never `opportunityId`. Repeated calls return its existing resolved record. |
+| `PATCH /api/alerts/:alertId/resolve`           | Resolve and acknowledge an open alert; `alertId` is the alert response's `id`, never `opportunityId`. Repeated calls return its existing resolved record.                                                                                                                                                 |
 
 Responses include the opportunity's `id`, code, company name, and current stage
 to identify the related CRM record without returning its full commercial data.
@@ -360,14 +360,14 @@ tie-breaker. Swagger documents enums, filters, pagination, and responses at
 Using the PDF's reference date, 15/10/2026, without changing the intentionally
 null `nextFollowUpAt` values:
 
-| Opportunity | Expected signals |
-| --- | --- |
-| OPP-2001 | None: contact was 14/10 and event is outside the window. |
-| OPP-2002 | `CONTACT_STALE` (contact 06/10) and `PROPOSAL_EXPIRED` (valid through 13/10). |
-| OPP-2003 | `CUSTOMER_EVENT_NEAR` (event 18/10). |
-| OPP-2004 | `CONTACT_STALE` (contact 02/10) and `PROPOSAL_EXPIRED` (valid through 10/10). |
-| OPP-2005 | None: contact was 15/10, proposal is valid, and event is distant. |
-| OPP-2006 and OPP-2007 | None: terminal stages are ineligible. |
+| Opportunity           | Expected signals                                                              |
+| --------------------- | ----------------------------------------------------------------------------- |
+| OPP-2001              | None: contact was 14/10 and event is outside the window.                      |
+| OPP-2002              | `CONTACT_STALE` (contact 06/10) and `PROPOSAL_EXPIRED` (valid through 13/10). |
+| OPP-2003              | `CUSTOMER_EVENT_NEAR` (event 18/10).                                          |
+| OPP-2004              | `CONTACT_STALE` (contact 02/10) and `PROPOSAL_EXPIRED` (valid through 10/10). |
+| OPP-2005              | None: contact was 15/10, proposal is valid, and event is distant.             |
+| OPP-2006 and OPP-2007 | None: terminal stages are ineligible.                                         |
 
 The other three automation choices from the case are documented here but not
 implemented in this feature:
@@ -452,8 +452,9 @@ services.
 
 Prisma migrations remain the deployment mechanism; the Compose migration
 service runs `prisma migrate deploy` and the idempotent case seed before the API.
-Authentication and a frontend are not implemented in this branch. The Swagger document also
-describes the existing health and starter root endpoints; test-only routes are
+The Next.js frontend and REST/Socket.IO integration are implemented in the
+monorepo. Authentication is intentionally absent from this MVP. The Swagger
+document also describes the health and root endpoints; test-only routes are
 not registered in the production application.
 
 Useful checks:

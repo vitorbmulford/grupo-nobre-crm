@@ -93,39 +93,41 @@ export class OpportunitiesService {
 
   async create(dto: CreateOpportunityDto) {
     try {
-      const opportunity = await this.prisma.$transaction(async (transaction) => {
-        const [nextCode] = await transaction.$queryRaw<
-          Array<{ value: bigint }>
-        >`
+      const opportunity = await this.prisma.$transaction(
+        async (transaction) => {
+          const [nextCode] = await transaction.$queryRaw<
+            Array<{ value: bigint }>
+          >`
           SELECT nextval('opportunity_code_seq') AS value
         `;
-        const code = `OPP-${String(nextCode.value).padStart(4, '0')}`;
-        const opportunity = await transaction.opportunity.create({
-          data: {
-            code,
-            companyName: dto.companyName.trim(),
-            contactName: optionalText(dto.contactName),
-            contactPhone: optionalPhone(dto.contactPhone),
-            contactEmail: optionalText(dto.contactEmail),
-            companyWebsite: optionalText(dto.companyWebsite),
-            companyLocation: optionalText(dto.companyLocation),
-            companyDescription: optionalText(dto.companyDescription),
-            stage: 'PRIMEIRO_CONTATO',
-            estimatedValue: decimal(dto.estimatedValue),
-            lastContactAt: dateOnly(dto.lastContactAt),
-            proposalValidUntil: dateOnly(dto.proposalValidUntil),
-            customerEventDate: dateOnly(dto.customerEventDate),
-            nextFollowUpAt: dateTime(dto.nextFollowUpAt),
-            lossReason: dto.lossReason?.trim() || null,
-            salespersonId: dto.salespersonId ?? null,
-            items: dto.items?.length
-              ? { create: dto.items.map(normalizeItem) }
-              : undefined,
-          },
-          include: opportunityRelations,
-        });
-        return serializeOpportunity(opportunity);
-      });
+          const code = `OPP-${String(nextCode.value).padStart(4, '0')}`;
+          const opportunity = await transaction.opportunity.create({
+            data: {
+              code,
+              companyName: dto.companyName.trim(),
+              contactName: optionalText(dto.contactName),
+              contactPhone: optionalPhone(dto.contactPhone),
+              contactEmail: optionalText(dto.contactEmail),
+              companyWebsite: optionalText(dto.companyWebsite),
+              companyLocation: optionalText(dto.companyLocation),
+              companyDescription: optionalText(dto.companyDescription),
+              stage: 'PRIMEIRO_CONTATO',
+              estimatedValue: decimal(dto.estimatedValue),
+              lastContactAt: dateOnly(dto.lastContactAt),
+              proposalValidUntil: dateOnly(dto.proposalValidUntil),
+              customerEventDate: dateOnly(dto.customerEventDate),
+              nextFollowUpAt: dateTime(dto.nextFollowUpAt),
+              lossReason: dto.lossReason?.trim() || null,
+              salespersonId: dto.salespersonId ?? null,
+              items: dto.items?.length
+                ? { create: dto.items.map(normalizeItem) }
+                : undefined,
+            },
+            include: opportunityRelations,
+          });
+          return serializeOpportunity(opportunity);
+        },
+      );
       this.realtime.publish('opportunity:created', {
         opportunityId: opportunity.id,
         version: opportunity.version,
@@ -138,119 +140,121 @@ export class OpportunitiesService {
 
   async update(id: string, dto: UpdateOpportunityDto) {
     try {
-      const opportunity = await this.prisma.$transaction(async (transaction) => {
-        const { version, items, ...fields } = dto;
-        const current = await transaction.opportunity.findFirst({
-          where: { id, deletedAt: null },
-          include: { items: true },
-        });
-        if (!current) throw new NotFoundException('Opportunity not found');
-        if (current.version !== version) {
-          throw new ConflictException('Opportunity version is stale');
-        }
-        const currentHasBudgetData = hasBudgetData(
-          current.estimatedValue,
-          current.items,
-        );
-        const nextEstimatedValue =
-          fields.estimatedValue === undefined
-            ? current.estimatedValue
-            : decimal(fields.estimatedValue);
-        const nextHasBudgetData = hasBudgetData(
-          nextEstimatedValue,
-          items === undefined
-            ? current.items
-            : items.map((item) => ({ quantity: item.quantity })),
-        );
-        if (
-          current.stage !== 'PRIMEIRO_CONTATO' &&
-          currentHasBudgetData &&
-          !nextHasBudgetData
-        ) {
-          throw new UnprocessableEntityException(
-            'An opportunity past the first stage must retain its estimated value and at least one gift item',
+      const opportunity = await this.prisma.$transaction(
+        async (transaction) => {
+          const { version, items, ...fields } = dto;
+          const current = await transaction.opportunity.findFirst({
+            where: { id, deletedAt: null },
+            include: { items: true },
+          });
+          if (!current) throw new NotFoundException('Opportunity not found');
+          if (current.version !== version) {
+            throw new ConflictException('Opportunity version is stale');
+          }
+          const currentHasBudgetData = hasBudgetData(
+            current.estimatedValue,
+            current.items,
           );
-        }
-        const data: Prisma.OpportunityUpdateManyMutationInput = {
-          version: { increment: 1 },
-          ...(fields.companyName !== undefined
-            ? { companyName: fields.companyName.trim() }
-            : {}),
-          ...(fields.contactName !== undefined
-            ? { contactName: optionalText(fields.contactName) }
-            : {}),
-          ...(fields.contactPhone !== undefined
-            ? { contactPhone: optionalPhone(fields.contactPhone) }
-            : {}),
-          ...(fields.contactEmail !== undefined
-            ? { contactEmail: optionalText(fields.contactEmail) }
-            : {}),
-          ...(fields.companyWebsite !== undefined
-            ? { companyWebsite: optionalText(fields.companyWebsite) }
-            : {}),
-          ...(fields.companyLocation !== undefined
-            ? { companyLocation: optionalText(fields.companyLocation) }
-            : {}),
-          ...(fields.companyDescription !== undefined
-            ? { companyDescription: optionalText(fields.companyDescription) }
-            : {}),
-          ...(fields.estimatedValue !== undefined
-            ? { estimatedValue: decimal(fields.estimatedValue) }
-            : {}),
-          ...(fields.lastContactAt !== undefined
-            ? { lastContactAt: dateOnly(fields.lastContactAt) }
-            : {}),
-          ...(fields.proposalValidUntil !== undefined
-            ? { proposalValidUntil: dateOnly(fields.proposalValidUntil) }
-            : {}),
-          ...(fields.customerEventDate !== undefined
-            ? { customerEventDate: dateOnly(fields.customerEventDate) }
-            : {}),
-          ...(fields.nextFollowUpAt !== undefined
-            ? { nextFollowUpAt: dateTime(fields.nextFollowUpAt) }
-            : {}),
-          ...(fields.lossReason !== undefined
-            ? { lossReason: fields.lossReason?.trim() || null }
-            : {}),
-          ...(fields.salespersonId !== undefined
-            ? { salespersonId: fields.salespersonId }
-            : {}),
-        };
-        const result = await transaction.opportunity.updateMany({
-          where: { id, version, deletedAt: null },
-          data,
-        });
-        if (result.count === 0) {
-          const current = await transaction.opportunity.findUnique({
-            where: { id },
-            select: { deletedAt: true },
-          });
-          if (!current || current.deletedAt) {
-            throw new NotFoundException('Opportunity not found');
+          const nextEstimatedValue =
+            fields.estimatedValue === undefined
+              ? current.estimatedValue
+              : decimal(fields.estimatedValue);
+          const nextHasBudgetData = hasBudgetData(
+            nextEstimatedValue,
+            items === undefined
+              ? current.items
+              : items.map((item) => ({ quantity: item.quantity })),
+          );
+          if (
+            current.stage !== 'PRIMEIRO_CONTATO' &&
+            currentHasBudgetData &&
+            !nextHasBudgetData
+          ) {
+            throw new UnprocessableEntityException(
+              'An opportunity past the first stage must retain its estimated value and at least one gift item',
+            );
           }
-          throw new ConflictException('Opportunity version is stale');
-        }
-
-        if (items !== undefined) {
-          await transaction.opportunityItem.deleteMany({
-            where: { opportunityId: id },
+          const data: Prisma.OpportunityUpdateManyMutationInput = {
+            version: { increment: 1 },
+            ...(fields.companyName !== undefined
+              ? { companyName: fields.companyName.trim() }
+              : {}),
+            ...(fields.contactName !== undefined
+              ? { contactName: optionalText(fields.contactName) }
+              : {}),
+            ...(fields.contactPhone !== undefined
+              ? { contactPhone: optionalPhone(fields.contactPhone) }
+              : {}),
+            ...(fields.contactEmail !== undefined
+              ? { contactEmail: optionalText(fields.contactEmail) }
+              : {}),
+            ...(fields.companyWebsite !== undefined
+              ? { companyWebsite: optionalText(fields.companyWebsite) }
+              : {}),
+            ...(fields.companyLocation !== undefined
+              ? { companyLocation: optionalText(fields.companyLocation) }
+              : {}),
+            ...(fields.companyDescription !== undefined
+              ? { companyDescription: optionalText(fields.companyDescription) }
+              : {}),
+            ...(fields.estimatedValue !== undefined
+              ? { estimatedValue: decimal(fields.estimatedValue) }
+              : {}),
+            ...(fields.lastContactAt !== undefined
+              ? { lastContactAt: dateOnly(fields.lastContactAt) }
+              : {}),
+            ...(fields.proposalValidUntil !== undefined
+              ? { proposalValidUntil: dateOnly(fields.proposalValidUntil) }
+              : {}),
+            ...(fields.customerEventDate !== undefined
+              ? { customerEventDate: dateOnly(fields.customerEventDate) }
+              : {}),
+            ...(fields.nextFollowUpAt !== undefined
+              ? { nextFollowUpAt: dateTime(fields.nextFollowUpAt) }
+              : {}),
+            ...(fields.lossReason !== undefined
+              ? { lossReason: fields.lossReason?.trim() || null }
+              : {}),
+            ...(fields.salespersonId !== undefined
+              ? { salespersonId: fields.salespersonId }
+              : {}),
+          };
+          const result = await transaction.opportunity.updateMany({
+            where: { id, version, deletedAt: null },
+            data,
           });
-          if (items.length > 0) {
-            await transaction.opportunityItem.createMany({
-              data: items.map((item) => ({
-                opportunityId: id,
-                ...normalizeItem(item),
-              })),
+          if (result.count === 0) {
+            const current = await transaction.opportunity.findUnique({
+              where: { id },
+              select: { deletedAt: true },
             });
+            if (!current || current.deletedAt) {
+              throw new NotFoundException('Opportunity not found');
+            }
+            throw new ConflictException('Opportunity version is stale');
           }
-        }
 
-        const opportunity = await transaction.opportunity.findUniqueOrThrow({
-          where: { id },
-          include: opportunityRelations,
-        });
-        return serializeOpportunity(opportunity);
-      });
+          if (items !== undefined) {
+            await transaction.opportunityItem.deleteMany({
+              where: { opportunityId: id },
+            });
+            if (items.length > 0) {
+              await transaction.opportunityItem.createMany({
+                data: items.map((item) => ({
+                  opportunityId: id,
+                  ...normalizeItem(item),
+                })),
+              });
+            }
+          }
+
+          const opportunity = await transaction.opportunity.findUniqueOrThrow({
+            where: { id },
+            include: opportunityRelations,
+          });
+          return serializeOpportunity(opportunity);
+        },
+      );
       this.realtime.publish('opportunity:updated', {
         opportunityId: opportunity.id,
         version: opportunity.version,
@@ -263,71 +267,75 @@ export class OpportunitiesService {
 
   async transitionStage(id: string, dto: TransitionStageDto) {
     try {
-      const opportunity = await this.prisma.$transaction(async (transaction) => {
-        const current = await transaction.opportunity.findFirst({
-          where: { id, deletedAt: null },
-          include: { items: true },
-        });
-        if (!current) throw new NotFoundException('Opportunity not found');
-        if (current.version !== dto.version) {
-          throw new ConflictException('Opportunity version is stale');
-        }
-
-        let decision: ReturnType<typeof evaluateTransition>;
-        try {
-          decision = evaluateTransition(
-            current.stage,
-            dto.toStage,
-            dto.reason,
-            current.estimatedValue !== null,
-            current.items.some((item) => item.quantity > 0),
-          );
-        } catch (error) {
-          throw new UnprocessableEntityException(
-            error instanceof Error ? error.message : 'Invalid stage transition',
-          );
-        }
-
-        const updated = await transaction.opportunity.updateMany({
-          where: {
-            id,
-            version: dto.version,
-            stage: current.stage,
-            deletedAt: null,
-          },
-          data: {
-            stage: dto.toStage,
-            ...(dto.toStage === 'PERDIDA'
-              ? { lossReason: decision.reason }
-              : {}),
-            version: { increment: 1 },
-          },
-        });
-        if (updated.count !== 1) {
-          const latest = await transaction.opportunity.findUnique({
-            where: { id },
-            select: { deletedAt: true },
+      const opportunity = await this.prisma.$transaction(
+        async (transaction) => {
+          const current = await transaction.opportunity.findFirst({
+            where: { id, deletedAt: null },
+            include: { items: true },
           });
-          if (!latest || latest.deletedAt) {
-            throw new NotFoundException('Opportunity not found');
+          if (!current) throw new NotFoundException('Opportunity not found');
+          if (current.version !== dto.version) {
+            throw new ConflictException('Opportunity version is stale');
           }
-          throw new ConflictException('Opportunity version is stale');
-        }
 
-        await transaction.stageTransition.create({
-          data: {
-            opportunityId: id,
-            fromStage: current.stage,
-            toStage: dto.toStage,
-            reason: decision.reason,
-          },
-        });
-        const opportunity = await transaction.opportunity.findUniqueOrThrow({
-          where: { id },
-          include: opportunityRelations,
-        });
-        return serializeOpportunity(opportunity);
-      });
+          let decision: ReturnType<typeof evaluateTransition>;
+          try {
+            decision = evaluateTransition(
+              current.stage,
+              dto.toStage,
+              dto.reason,
+              current.estimatedValue !== null,
+              current.items.some((item) => item.quantity > 0),
+            );
+          } catch (error) {
+            throw new UnprocessableEntityException(
+              error instanceof Error
+                ? error.message
+                : 'Invalid stage transition',
+            );
+          }
+
+          const updated = await transaction.opportunity.updateMany({
+            where: {
+              id,
+              version: dto.version,
+              stage: current.stage,
+              deletedAt: null,
+            },
+            data: {
+              stage: dto.toStage,
+              ...(dto.toStage === 'PERDIDA'
+                ? { lossReason: decision.reason }
+                : {}),
+              version: { increment: 1 },
+            },
+          });
+          if (updated.count !== 1) {
+            const latest = await transaction.opportunity.findUnique({
+              where: { id },
+              select: { deletedAt: true },
+            });
+            if (!latest || latest.deletedAt) {
+              throw new NotFoundException('Opportunity not found');
+            }
+            throw new ConflictException('Opportunity version is stale');
+          }
+
+          await transaction.stageTransition.create({
+            data: {
+              opportunityId: id,
+              fromStage: current.stage,
+              toStage: dto.toStage,
+              reason: decision.reason,
+            },
+          });
+          const opportunity = await transaction.opportunity.findUniqueOrThrow({
+            where: { id },
+            include: opportunityRelations,
+          });
+          return serializeOpportunity(opportunity);
+        },
+      );
       this.realtime.publish('opportunity:stage-changed', {
         opportunityId: opportunity.id,
         version: opportunity.version,

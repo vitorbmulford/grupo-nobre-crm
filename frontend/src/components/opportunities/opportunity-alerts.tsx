@@ -1,15 +1,36 @@
 "use client";
 
-import { useInfiniteQuery } from "@tanstack/react-query";
-import { BellRing, CalendarClock, Clock3 } from "lucide-react";
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQueryClient,
+} from "@tanstack/react-query";
+import { BellRing, CalendarClock, Check, Clock3 } from "lucide-react";
+import { useState } from "react";
+import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   EmptyState,
   ErrorState,
   LoadingState,
 } from "@/components/shared/request-states";
 import { opportunityAlertsQuery } from "@/lib/api/queries";
+import {
+  alertMutationErrorMessage,
+  invalidateAfterAlertResolution,
+  resolveAlert,
+} from "@/lib/api/alert-mutations";
 import { ALERT_TYPE_LABELS, alertDescription } from "@/lib/alerts";
 import { formatDate, formatDateTime } from "@/lib/format";
 import type { FollowUpAlert } from "@/types/api";
@@ -19,107 +40,171 @@ export function OpportunityAlerts({
 }: {
   opportunityId: string;
 }) {
+  const queryClient = useQueryClient();
   const query = useInfiniteQuery(opportunityAlertsQuery(opportunityId));
+  const [confirmAlert, setConfirmAlert] = useState<FollowUpAlert | null>(null);
   const alerts = query.data?.pages.flatMap((page) => page.data) ?? [];
   const openCount = alerts.filter((alert) => alert.status === "OPEN").length;
+  const resolve = useMutation({
+    mutationFn: resolveAlert,
+    onSuccess: async () => {
+      await invalidateAfterAlertResolution(queryClient);
+      setConfirmAlert(null);
+      toast.success("Alerta marcado como resolvido.");
+    },
+    onError: (error) => toast.error(alertMutationErrorMessage(error)),
+  });
 
   return (
-    <section
-      className="mt-6"
-      aria-labelledby="opportunity-alerts-title"
-      aria-busy={query.isPending || query.isFetchingNextPage}
-    >
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2
-            id="opportunity-alerts-title"
-            className="flex items-center gap-2 text-lg font-semibold"
-          >
-            <BellRing aria-hidden="true" className="text-primary size-5" />
-            Alertas da oportunidade
-          </h2>
-          <p className="text-muted-foreground mt-1 text-sm">
-            Alertas registrados pelo CRM para esta negociação.
-          </p>
-        </div>
-        {!query.isPending && !query.isError && alerts.length > 0 && (
-          <span className="text-muted-foreground text-sm tabular-nums">
-            {alerts.length} {alerts.length === 1 ? "alerta" : "alertas"}
-            {openCount > 0 && ` · ${openCount} em aberto`}
-          </span>
-        )}
-      </div>
-
-      {query.isPending ? (
-        <LoadingState label="Carregando alertas da oportunidade…" />
-      ) : query.isError ? (
-        <ErrorState
-          message={query.error.message}
-          onRetry={() => void query.refetch()}
-        />
-      ) : alerts.length === 0 ? (
-        <EmptyState
-          title="Nenhum alerta registrado"
-          description="Quando esta oportunidade precisar de atenção, os alertas aparecerão aqui."
-        />
-      ) : (
-        <>
-          <ul className="divide-y rounded-xl border">
-            {alerts.map((alert) => (
-              <li key={alert.id} className="flex items-start gap-3 p-4 sm:p-5">
-                <span className="bg-muted text-muted-foreground mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-lg">
-                  <BellRing aria-hidden="true" className="size-4" />
-                </span>
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h3 className="font-medium">
-                      {ALERT_TYPE_LABELS[alert.type]}
-                    </h3>
-                    <AlertStatusBadge status={alert.status} />
-                  </div>
-                  <p className="text-muted-foreground mt-1 text-sm leading-relaxed">
-                    {alertDescription(alert.type, referenceDate(alert))}
-                  </p>
-                  <div className="text-muted-foreground mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs">
-                    <span className="inline-flex items-center gap-1.5">
-                      <CalendarClock aria-hidden="true" className="size-3.5" />
-                      Gerado em {formatDateTime(alert.createdAt)}
-                    </span>
-                    {alert.status === "RESOLVED" && alert.resolvedAt && (
-                      <span className="inline-flex items-center gap-1.5">
-                        <Clock3 aria-hidden="true" className="size-3.5" />
-                        Resolvido em {formatDateTime(alert.resolvedAt)}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              </li>
-            ))}
-          </ul>
-          {query.hasNextPage && (
-            <div className="mt-4 flex justify-center">
-              <Button
-                variant="outline"
-                onClick={() => void query.fetchNextPage()}
-                disabled={query.isFetchingNextPage}
-              >
-                {query.isFetchingNextPage
-                  ? "Carregando…"
-                  : "Carregar mais alertas"}
-              </Button>
-            </div>
-          )}
-          {query.isFetchNextPageError && (
-            <p
-              role="alert"
-              className="text-destructive mt-3 text-center text-sm"
+    <>
+      <section
+        className="mt-6"
+        aria-labelledby="opportunity-alerts-title"
+        aria-busy={query.isPending || query.isFetchingNextPage}
+      >
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2
+              id="opportunity-alerts-title"
+              className="flex items-center gap-2 text-lg font-semibold"
             >
-              Não foi possível carregar mais alertas. Tente novamente.
+              <BellRing aria-hidden="true" className="text-primary size-5" />
+              Alertas da oportunidade
+            </h2>
+            <p className="text-muted-foreground mt-1 text-sm">
+              Alertas registrados pelo CRM para esta negociação.
             </p>
+          </div>
+          {!query.isPending && !query.isError && alerts.length > 0 && (
+            <span className="text-muted-foreground text-sm tabular-nums">
+              {alerts.length} {alerts.length === 1 ? "alerta" : "alertas"}
+              {openCount > 0 && ` · ${openCount} em aberto`}
+            </span>
           )}
-        </>
-      )}
-    </section>
+        </div>
+
+        {query.isPending ? (
+          <LoadingState label="Carregando alertas da oportunidade…" />
+        ) : query.isError ? (
+          <ErrorState
+            message={query.error.message}
+            onRetry={() => void query.refetch()}
+          />
+        ) : alerts.length === 0 ? (
+          <EmptyState
+            title="Nenhum alerta registrado"
+            description="Quando esta oportunidade precisar de atenção, os alertas aparecerão aqui."
+          />
+        ) : (
+          <>
+            <ul className="divide-y rounded-xl border">
+              {alerts.map((alert) => (
+                <li
+                  key={alert.id}
+                  className="flex items-start gap-3 p-4 sm:p-5"
+                >
+                  <span className="bg-muted text-muted-foreground mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-lg">
+                    <BellRing aria-hidden="true" className="size-4" />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 className="font-medium">
+                        {ALERT_TYPE_LABELS[alert.type]}
+                      </h3>
+                      <AlertStatusBadge status={alert.status} />
+                      {alert.status === "OPEN" && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="ml-auto"
+                          disabled={resolve.isPending}
+                          onClick={() => setConfirmAlert(alert)}
+                        >
+                          <Check aria-hidden="true" />
+                          Marcar como resolvido
+                        </Button>
+                      )}
+                    </div>
+                    <p className="text-muted-foreground mt-1 text-sm leading-relaxed">
+                      {alertDescription(alert.type, referenceDate(alert))}
+                    </p>
+                    <div className="text-muted-foreground mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs">
+                      <span className="inline-flex items-center gap-1.5">
+                        <CalendarClock
+                          aria-hidden="true"
+                          className="size-3.5"
+                        />
+                        Gerado em {formatDateTime(alert.createdAt)}
+                      </span>
+                      {alert.status === "RESOLVED" && alert.resolvedAt && (
+                        <span className="inline-flex items-center gap-1.5">
+                          <Clock3 aria-hidden="true" className="size-3.5" />
+                          Resolvido em {formatDateTime(alert.resolvedAt)}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+            {query.hasNextPage && (
+              <div className="mt-4 flex justify-center">
+                <Button
+                  variant="outline"
+                  onClick={() => void query.fetchNextPage()}
+                  disabled={query.isFetchingNextPage}
+                >
+                  {query.isFetchingNextPage
+                    ? "Carregando…"
+                    : "Carregar mais alertas"}
+                </Button>
+              </div>
+            )}
+            {query.isFetchNextPageError && (
+              <p
+                role="alert"
+                className="text-destructive mt-3 text-center text-sm"
+              >
+                Não foi possível carregar mais alertas. Tente novamente.
+              </p>
+            )}
+          </>
+        )}
+      </section>
+
+      <AlertDialog
+        open={confirmAlert !== null}
+        onOpenChange={(open) => {
+          if (!open && !resolve.isPending) setConfirmAlert(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Marcar alerta como resolvido?</AlertDialogTitle>
+            <AlertDialogDescription>
+              O alerta sairá dos itens em aberto e ficará disponível no
+              histórico de resolvidos. Isso registra o reconhecimento desta
+              ocorrência; a análise automática continua ativa.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={resolve.isPending}>
+              Cancelar
+            </AlertDialogCancel>
+            <AlertDialogAction
+              disabled={resolve.isPending || !confirmAlert}
+              onClick={(event) => {
+                event.preventDefault();
+                if (confirmAlert) resolve.mutate(confirmAlert.id);
+              }}
+            >
+              {resolve.isPending ? "Atualizando…" : "Confirmar resolução"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }
 
