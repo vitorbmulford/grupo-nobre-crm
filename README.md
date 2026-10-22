@@ -41,6 +41,12 @@ Cada tipo é avaliado independentemente, então uma oportunidade pode ter vário
 
 Essas escolhas atendem ao MVP de uma instância simples. Não há lock distribuído ou eleição de líder entre múltiplas instâncias; o banco preserva a unicidade dos alertas abertos, mas múltiplas instâncias podem repetir o trabalho de avaliação.
 
+## Demonstração
+
+Vídeo mostrando a aplicação integrada, o fluxo comercial e a persistência dos dados.
+
+[![Assistir à demonstração da aplicação](https://img.youtube.com/vi/nFwQVloWnhE/hqdefault.jpg)](https://www.youtube.com/watch?v=nFwQVloWnhE)
+
 ## Requisitos do case e funcionalidades adicionais
 
 O case pede uma interface para listar, pesquisar, filtrar e consultar oportunidades, um Kanban para mover negociações, uma API REST com PostgreSQL, regras de transição e histórico de etapas, além da escolha de um problema para automação funcional com testes críticos. Também pede propostas para os outros três problemas e documentação de execução, decisões, limitações e uso de IA. O pipeline Kanban, portanto, faz parte do escopo solicitado.
