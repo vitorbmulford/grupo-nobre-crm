@@ -112,23 +112,24 @@ export function OpportunityAlerts({
                         {ALERT_TYPE_LABELS[alert.type]}
                       </h3>
                       <AlertStatusBadge status={alert.status} />
-                      {alert.status === "OPEN" && (
+                    </div>
+                    <p className="text-muted-foreground mt-1 text-sm leading-relaxed">
+                      {alertDescription(alert.type, referenceDate(alert))}
+                    </p>
+                    {alert.status === "OPEN" && (
+                      <div className="mt-3 flex justify-end">
                         <Button
                           type="button"
                           variant="outline"
                           size="sm"
-                          className="ml-auto"
                           disabled={resolve.isPending}
                           onClick={() => setConfirmAlert(alert)}
                         >
                           <Check aria-hidden="true" />
                           Marcar como resolvido
                         </Button>
-                      )}
-                    </div>
-                    <p className="text-muted-foreground mt-1 text-sm leading-relaxed">
-                      {alertDescription(alert.type, referenceDate(alert))}
-                    </p>
+                      </div>
+                    )}
                     <div className="text-muted-foreground mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs">
                       <span className="inline-flex items-center gap-1.5">
                         <CalendarClock

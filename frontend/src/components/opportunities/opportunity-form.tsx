@@ -68,6 +68,7 @@ export function OpportunityForm({
   });
   const salespeople = useQuery(salespeopleQuery);
   const opportunity = detail.data;
+  const isLostOpportunity = opportunity?.stage === "PERDIDA";
   const [version, setVersion] = useState(opportunity?.version);
   const [conflict, setConflict] = useState(false);
   const form = useForm<OpportunityFormValues>({
@@ -361,19 +362,21 @@ export function OpportunityForm({
                 {...form.register("nextFollowUpAt")}
               />
             </Field>
-            <Field
-              id="lossReason"
-              label="Motivo de perda"
-              error={fieldError("lossReason")}
-              characterCount={{ current: lossReasonLength, max: 1000 }}
-              className="sm:col-span-2"
-            >
-              <Textarea
+            {isLostOpportunity && (
+              <Field
                 id="lossReason"
-                maxLength={1000}
-                {...form.register("lossReason")}
-              />
-            </Field>
+                label="Motivo de perda"
+                error={fieldError("lossReason")}
+                characterCount={{ current: lossReasonLength, max: 1000 }}
+                className="sm:col-span-2"
+              >
+                <Textarea
+                  id="lossReason"
+                  maxLength={1000}
+                  {...form.register("lossReason")}
+                />
+              </Field>
+            )}
           </div>
         </Card>
 
